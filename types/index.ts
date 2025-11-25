@@ -220,3 +220,27 @@ export interface InsightResponse {
     priority: "high" | "medium" | "low";
   }[];
 }
+
+// Subscription Types
+export type SubscriptionTier = "basic" | "advanced" | "elite" | null;
+export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "unpaid" | null;
+
+export interface PaymentMethodInfo {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export interface SubscriptionInfo {
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialEnd: string | null;
+}
+
+export interface SubscriptionData {
+  subscription: SubscriptionInfo;
+  paymentMethod: PaymentMethodInfo | null;
+}

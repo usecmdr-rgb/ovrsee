@@ -1,17 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, tierConfig, type TierId } from "@/lib/stripe";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
+import {
+  hasEmailUsedTrial,
+  markTrialAsUsed,
+  isUserOnActiveTrial,
+} from "@/lib/trial-eligibility";
+import { requireAuthFromRequest } from "@/lib/auth-helpers";
 
+/**
+ * POST /api/trial/start
+ * 
+ * Starts a 3-day free trial for a user.
+ * 
+ * SECURITY & TRIAL ENFORCEMENT:
+ * - User must be authenticated
+ * - Email-based trial eligibility check (one trial per email, ever)
+ * - Server-side enforcement prevents trial abuse
+ * - Cannot restart trial even if account is deleted and recreated
+ * 
+ * Returns:
+ * - success: boolean
+ * - subscriptionId: Stripe subscription ID
+ * - trialEndsAt: ISO timestamp when trial ends
+ */
 export async function POST(request: NextRequest) {
   try {
-    const { tier, userId } = await request.json();
+    // Require authentication - get user from session
+    const user = await requireAuthFromRequest(request);
+    const userId = user.id;
+    const userEmail = user.email;
+
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: "User email is required" },
+        { status: 400 }
+      );
+    }
+
+    const { tier } = await request.json();
 
     if (!tier || !["basic", "advanced", "elite"].includes(tier)) {
       return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 401 });
+    // ============================================
+    // ONE-TIME TRIAL ENFORCEMENT
+    // ============================================
+    // Check if this email has already used a trial
+    // This check survives account deletion and prevents trial abuse
+    const emailHasUsedTrial = await hasEmailUsedTrial(userEmail);
+    if (emailHasUsedTrial) {
+      return NextResponse.json(
+        {
+          error: "You have already used your free trial",
+          code: "TRIAL_ALREADY_USED",
+          message:
+            "Each email address can only use the free trial once. Please choose a paid plan to continue.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Check if user is already on an active trial
+    const isOnTrial = await isUserOnActiveTrial(userId);
+    if (isOnTrial) {
+      return NextResponse.json(
+        {
+          error: "You already have an active trial",
+          code: "TRIAL_ALREADY_ACTIVE",
+        },
+        { status: 400 }
+      );
     }
 
     const tierData = tierConfig[tier as TierId];
@@ -45,7 +105,7 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    // Check if user already has an active subscription or trial
+    // Check if user already has an active subscription or trial in Stripe
     const existingSubscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: "all",
@@ -78,23 +138,49 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Store subscription info in Supabase (you may want to create a subscriptions table)
+    // Calculate trial end date (3 days from now)
+    const trialEndsAt = subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toISOString()
+      : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+    // ============================================
+    // MARK TRIAL AS USED (ONE-TIME ENFORCEMENT)
+    // ============================================
+    // This flag is NEVER reset, even if:
+    // - Trial ends
+    // - User cancels
+    // - Account is deleted
+    // This prevents the same email from getting another trial
+    await markTrialAsUsed(userId, userEmail);
+
+    // Store subscription info in Supabase
     await supabase.from("profiles").update({
       subscription_tier: tier,
       subscription_status: "trialing",
-      trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      trial_ends_at: trialEndsAt,
+      stripe_subscription_id: subscription.id,
     }).eq("id", userId);
 
     return NextResponse.json({
       success: true,
       subscriptionId: subscription.id,
-      trialEndsAt: subscription.trial_end
-        ? new Date(subscription.trial_end * 1000).toISOString()
-        : null,
+      trialEndsAt: trialEndsAt,
     });
   } catch (error: any) {
     console.error("Trial start error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    
+    // Handle authentication errors
+    if (error.message?.includes("Unauthorized")) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: error.message || "Failed to start trial" },
+      { status: 500 }
+    );
   }
 }
 

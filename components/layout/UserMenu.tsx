@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import { useAppState } from "@/context/AppStateContext";
 
@@ -12,6 +13,7 @@ const dropdownItems = [
 ];
 
 const UserMenu = () => {
+  const router = useRouter();
   const {
     isAuthenticated,
     logout,
@@ -30,7 +32,7 @@ const UserMenu = () => {
         setShowBusinessModal(true);
         break;
       case "billing":
-        setShowBillingModal(true);
+        router.push("/account/subscription");
         break;
       case "settings":
         setShowSettingsModal(true);

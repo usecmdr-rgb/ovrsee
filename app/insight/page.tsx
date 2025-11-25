@@ -146,17 +146,31 @@ export default function InsightPage() {
         </div>
       </section>
 
-      {/* Insight Intelligence Features */}
-      <section className="mt-4">
-        <h2 className="text-xl font-semibold mb-4">Insight Intelligence</h2>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <DailyBriefCard />
-          <InsightGenerator />
-        </div>
-        <div className="mt-4">
-          <WorkflowManager />
-        </div>
-      </section>
+      {/* Insight Intelligence Features - Disabled in preview mode */}
+      {!isPreview && (
+        <section className="mt-4">
+          <h2 className="text-xl font-semibold mb-4">Insight Intelligence</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DailyBriefCard />
+            <InsightGenerator />
+          </div>
+          <div className="mt-4">
+            <WorkflowManager />
+          </div>
+        </section>
+      )}
+      {isPreview && (
+        <section className="mt-4">
+          <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-12 text-center dark:border-slate-700 dark:bg-slate-900/20">
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+              Interactive features are disabled in preview mode
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              Upgrade to Elite tier to unlock Daily Brief, Insight Generator, and Workflow Manager
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

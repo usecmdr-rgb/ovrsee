@@ -6,9 +6,11 @@ const ADMIN_EMAILS = ["usecmdr@gmail.com"];
 
 // Agent access by tier
 const AGENT_ACCESS_BY_TIER: Record<string, AgentId[]> = {
+  trial: ["sync", "aloha", "studio", "insight"], // Trial: All agents (full access during trial)
   basic: ["sync"], // Basic tier: Sync only
   advanced: ["sync", "aloha", "studio"], // Advanced: Sync + Aloha + Studio
   elite: ["sync", "aloha", "studio", "insight"], // Elite: All agents
+  // trial_expired: [] - No access
 };
 
 /**
@@ -21,17 +23,40 @@ export async function isAdmin(email: string | undefined | null): Promise<boolean
 
 /**
  * Get user's subscription tier from Supabase
+ * Prefers subscriptions table over profiles table
  */
 export async function getUserSubscriptionTier(userId: string): Promise<string | null> {
   const supabase = getSupabaseServerClient();
+  
+  // Try subscriptions table first (primary source of truth)
+  const { data: subscription } = await supabase
+    .from("subscriptions")
+    .select("tier, status")
+    .eq("user_id", userId)
+    .single();
+
+  if (subscription) {
+  // Return tier if subscription is active, trialing, or trial (even if expired, we need to know)
+  if (subscription.status === "active" || subscription.status === "trialing" || subscription.tier === "trial" || subscription.tier === "trial_expired") {
+    return subscription.tier || null;
+  }
+  return null;
+  }
+
+  // Fallback to profiles table (for backward compatibility)
   const { data: profile } = await supabase
     .from("profiles")
     .select("subscription_tier, subscription_status")
     .eq("id", userId)
     .single();
 
-  // Only return tier if subscription is active or trialing
-  if (profile?.subscription_status === "active" || profile?.subscription_status === "trialing") {
+  // Return tier if subscription is active, trialing, or trial (even if expired, we need to know)
+  if (
+    profile?.subscription_status === "active" || 
+    profile?.subscription_status === "trialing" || 
+    profile?.subscription_tier === "trial" || 
+    profile?.subscription_tier === "trial_expired"
+  ) {
     return profile.subscription_tier || null;
   }
 
@@ -76,6 +101,11 @@ export async function hasAgentAccess(userId: string, agentId: AgentId, userEmail
     return false; // No active subscription
   }
 
+  // Trial expired users have no access
+  if (tier === "trial_expired") {
+    return false;
+  }
+
   // Check if agent is included in user's tier
   const allowedAgents = AGENT_ACCESS_BY_TIER[tier] || [];
   return allowedAgents.includes(agentId);
@@ -96,6 +126,11 @@ export async function getUserAccessibleAgents(userId: string, userEmail?: string
   
   if (!tier) {
     return []; // No active subscription
+  }
+
+  // Trial expired users have no access
+  if (tier === "trial_expired") {
+    return [];
   }
 
   return AGENT_ACCESS_BY_TIER[tier] || [];

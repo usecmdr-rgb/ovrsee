@@ -4,6 +4,7 @@ import { openai } from "@/lib/openai";
 import { getModelForTask } from "@/lib/agents/router";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { hasAgentAccess, isAdmin, getUserEmail } from "@/lib/auth";
+import { hasActiveAccess } from "@/lib/subscription/trial";
 import type { AgentKey, TaskType } from "@/lib/agents/config";
 import type {
   ChatCompletionMessageParam,
@@ -283,8 +284,21 @@ export async function POST(req: Request) {
     // From this point on, use userId (which is guaranteed to be a string)
     const userId = effectiveUserId;
 
-    // Check if user has access to the requested agent (skip for dev-user)
+    // Check if user has active access (not expired trial) - skip for dev-user
     if (userId !== "dev-user") {
+      const hasActive = await hasActiveAccess(userId);
+      
+      if (!hasActive) {
+        return NextResponse.json(
+          { 
+            error: "Your free trial has expired. Please upgrade to a paid plan to continue using CommanderX.",
+            code: "TRIAL_EXPIRED"
+          },
+          { status: 403 }
+        );
+      }
+
+      // Check if user has access to the requested agent
       const hasAccess = await hasAgentAccess(userId, agent, userEmail);
       
       if (!hasAccess) {
