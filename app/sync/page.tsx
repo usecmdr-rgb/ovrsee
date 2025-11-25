@@ -985,7 +985,7 @@ const SyncPage = () => {
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-500">Select an email to preview Sync's draft.</p>
+                  <p className="mt-4 text-sm text-slate-500">Select an email to preview Sync&apos;s draft.</p>
                 )}
               </div>
             </div>

@@ -70,7 +70,7 @@ const BusinessInfoModal = () => {
           />
         </label>
         <label className="text-sm font-medium">
-          Notes / "Help us, help you"
+          Notes / &quot;Help us, help you&quot;
           <textarea
             value={businessInfo.notes}
             onChange={(event) => updateBusinessInfo({ notes: event.target.value })}

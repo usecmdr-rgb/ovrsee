@@ -200,7 +200,8 @@ export default function DailyBriefCard() {
       {!brief && !loading && !error && (
         <div className="mt-6 text-center py-8 text-slate-500">
           <FileText size={48} className="mx-auto mb-3 opacity-50" />
-          <p>Click "Generate Brief" to create your daily command brief</p>
+
+          <p>Click &quot;Generate Brief&quot; to create your daily command brief</p>
         </div>
       )}
     </div>

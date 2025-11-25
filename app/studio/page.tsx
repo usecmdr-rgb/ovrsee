@@ -3699,7 +3699,7 @@ export default function StudioPage() {
                   </p>
                   {shortsComposition.length === 0 ? (
                     <p className="text-[10px] text-slate-500 text-center py-4">
-                      No clips included yet. Enable "Include in Short" on video assets.
+                      No clips included yet. Enable &quot;Include in Short&quot; on video assets.
                     </p>
                   ) : (
                     <div className="space-y-2">
