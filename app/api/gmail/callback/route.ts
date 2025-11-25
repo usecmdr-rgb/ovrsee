@@ -135,14 +135,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Redirect back to sync page with success
-    // Use the origin from the request to ensure correct redirect
-    const origin = request.headers.get("origin") || 
-                   request.headers.get("referer")?.split("/").slice(0, 3).join("/") || 
-                   process.env.NEXT_PUBLIC_APP_URL || 
-                   "http://localhost:3001";
-    
+    // Reuse computed origin to ensure consistent redirect
+    const redirectOrigin =
+      origin ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "http://localhost:3001";
+
     return NextResponse.redirect(
-      new URL(`${origin}/sync?gmail_connected=true`, request.url)
+      new URL(`${redirectOrigin}/sync?gmail_connected=true`, request.url)
     );
   } catch (error: any) {
     console.error("Error in Gmail callback:", error);
