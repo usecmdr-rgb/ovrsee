@@ -5,6 +5,9 @@ import { mockEmails } from "@/lib/data";
 import { useAppState } from "@/context/AppStateContext";
 import type { EmailRecord } from "@/types";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import PreviewBanner from "@/components/agent/PreviewBanner";
+import { AGENT_BY_ID } from "@/lib/config/agents";
 import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, Clock, MapPin, Users, FileText, Edit2 } from "lucide-react";
 
@@ -76,16 +79,24 @@ const SyncPage = () => {
   const [memoText, setMemoText] = useState("");
   const [reminderText, setReminderText] = useState("");
 
+  const { hasAccess, isLoading: accessLoading } = useAgentAccess("sync");
   const { stats, loading, error } = useAgentStats();
+  
+  // Use preview/mock data if user doesn't have access
+  const isPreview = !hasAccess && !accessLoading;
+  
+  // Fallback to realistic random numbers if no stats available or in preview mode
   const fallbackStats = {
     ...emptyAgentStats,
-    xi_important_emails: 18,
-    xi_payments_bills: 7,
-    xi_invoices: 4,
-    xi_missed_emails: 3,
+    xi_important_emails: isPreview ? 12 : 18,
+    xi_payments_bills: isPreview ? 4 : 7,
+    xi_invoices: isPreview ? 2 : 4,
+    xi_missed_emails: isPreview ? 2 : 3,
   };
   const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
+  
+  const agentConfig = AGENT_BY_ID["sync"];
 
   // Email connection and loading
   useEffect(() => {
@@ -641,6 +652,15 @@ const SyncPage = () => {
   const categoryMap = Object.fromEntries(alertCategories.map((cat) => [cat.id, cat]));
 
   const handleChat = async (event: FormEvent<HTMLFormElement>) => {
+    // Disable in preview mode
+    if (isPreview) {
+      event.preventDefault();
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "agent", text: "This feature requires a Basic or higher subscription. Upgrade to unlock full Sync agent access." },
+      ]);
+      return;
+    }
     event.preventDefault();
     const form = event.currentTarget;
     const input = form.elements.namedItem("message") as HTMLInputElement;
@@ -773,6 +793,12 @@ const SyncPage = () => {
 
   return (
     <div className="space-y-8">
+      {isPreview && (
+        <PreviewBanner 
+          agentName={agentConfig.label} 
+          requiredTier={agentConfig.requiredTier}
+        />
+      )}
       <header>
         <p className="text-sm uppercase tracking-widest text-slate-500">Sync agent</p>
         <h1 className="text-3xl font-semibold">Inbox & calendar command board</h1>

@@ -21,6 +21,7 @@ export interface AgentConfig {
   accent: string; // Tailwind color class for UI
   route: string; // Frontend route path
   oldId?: "alpha" | "mu" | "xi" | "beta"; // Legacy ID for migration reference
+  requiredTier?: "basic" | "advanced" | "elite"; // Minimum tier required for access
 }
 
 export const AGENTS: AgentConfig[] = [
@@ -32,6 +33,7 @@ export const AGENTS: AgentConfig[] = [
     accent: "bg-red-500",
     route: "/aloha",
     oldId: "alpha",
+    requiredTier: "advanced",
   },
   {
     id: "studio",
@@ -41,6 +43,7 @@ export const AGENTS: AgentConfig[] = [
     accent: "bg-violet-500",
     route: "/studio",
     oldId: "mu",
+    requiredTier: "advanced",
   },
   {
     id: "sync",
@@ -50,6 +53,7 @@ export const AGENTS: AgentConfig[] = [
     accent: "bg-orange-500",
     route: "/sync",
     oldId: "xi",
+    requiredTier: "basic",
   },
   {
     id: "insight",
@@ -59,6 +63,7 @@ export const AGENTS: AgentConfig[] = [
     accent: "bg-emerald-500",
     route: "/insight",
     oldId: "beta",
+    requiredTier: "elite",
   },
 ];
 

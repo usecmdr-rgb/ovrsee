@@ -4,6 +4,9 @@ import { useState } from "react";
 import { mockCalls } from "@/lib/data";
 import type { CallRecord } from "@/types";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import PreviewBanner from "@/components/agent/PreviewBanner";
+import { AGENT_BY_ID } from "@/lib/config/agents";
 
 const appointments = [
   { title: "Discovery call", when: "Fri - 9:30 AM", with: "Maria Gomez" },
@@ -11,21 +14,34 @@ const appointments = [
 ];
 
 export default function AlohaPage() {
+  const { hasAccess, isLoading: accessLoading } = useAgentAccess("aloha");
   const { stats, loading, error } = useAgentStats();
-  // Fallback to realistic random numbers if no stats available
+  
+  // Use preview/mock data if user doesn't have access
+  const isPreview = !hasAccess && !accessLoading;
+  
+  // Fallback to realistic random numbers if no stats available or in preview mode
   const fallbackStats = {
     ...emptyAgentStats,
-    alpha_calls_total: 247,
-    alpha_calls_missed: 8,
-    alpha_appointments: 32,
+    alpha_calls_total: isPreview ? 156 : 247,
+    alpha_calls_missed: isPreview ? 5 : 8,
+    alpha_appointments: isPreview ? 18 : 32,
   };
   const latestStats = stats ?? fallbackStats;
   const answeredCalls = Math.max(latestStats.alpha_calls_total - latestStats.alpha_calls_missed, 0);
   const noStats = !stats && !loading && !error;
   const [selectedCall, setSelectedCall] = useState<CallRecord | null>(mockCalls[0]);
 
+  const agentConfig = AGENT_BY_ID["aloha"];
+
   return (
     <div className="space-y-8">
+      {isPreview && (
+        <PreviewBanner 
+          agentName={agentConfig.label} 
+          requiredTier={agentConfig.requiredTier}
+        />
+      )}
       <header>
         <p className="text-sm uppercase tracking-widest text-slate-500">Aloha agent</p>
         <h1 className="text-3xl font-semibold">Calls & appointments overview</h1>

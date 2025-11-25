@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import PreviewBanner from "@/components/agent/PreviewBanner";
+import { AGENT_BY_ID } from "@/lib/config/agents";
 import DailyBriefCard from "@/components/insight/DailyBriefCard";
 import InsightGenerator from "@/components/insight/InsightGenerator";
 import WorkflowManager from "@/components/insight/WorkflowManager";
@@ -34,19 +37,32 @@ const insights = {
 };
 
 export default function InsightPage() {
+  const { hasAccess, isLoading: accessLoading } = useAgentAccess("insight");
   const { stats, loading, error } = useAgentStats();
-  // Fallback to realistic random numbers if no stats available
+  
+  // Use preview/mock data if user doesn't have access
+  const isPreview = !hasAccess && !accessLoading;
+  
+  // Fallback to realistic random numbers if no stats available or in preview mode
   const fallbackStats = {
     ...emptyAgentStats,
-    beta_insights_count: 42,
+    beta_insights_count: isPreview ? 28 : 42,
   };
   const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
   const [timeframe, setTimeframe] = useState<keyof typeof mockRollupStats>("daily");
   const current = mockRollupStats[timeframe];
 
+  const agentConfig = AGENT_BY_ID["insight"];
+
   return (
     <div className="space-y-6">
+      {isPreview && (
+        <PreviewBanner 
+          agentName={agentConfig.label} 
+          requiredTier={agentConfig.requiredTier}
+        />
+      )}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-widest text-slate-500">Insight agent</p>

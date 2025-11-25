@@ -7,6 +7,9 @@ import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
 import { useAppState } from "@/context/AppStateContext";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 import { supabaseBrowserClient } from "@/lib/supabaseClient";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import PreviewBanner from "@/components/agent/PreviewBanner";
+import { AGENT_BY_ID } from "@/lib/config/agents";
 import type { ConnectedAccountType } from "@/types";
 import { Download, Facebook, Instagram, Maximize2, X, Plus, Trash2, Bold, Italic, Underline, Sparkles, Send, Linkedin, Globe, Check, Loader2, SlidersHorizontal, Wand2, Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, ChevronDown, ChevronUp, Type, Image as ImageIcon, Video, ArrowUp, ArrowDown } from "lucide-react";
 
@@ -1867,16 +1870,23 @@ function StudioCropPanel({
 }
 
 export default function StudioPage() {
+  const { hasAccess, isLoading: accessLoading } = useAgentAccess("studio");
   const [activeTab, setActiveTab] = useState<"edit" | "analytics">("edit");
   const { businessInfo } = useAppState();
   const { stats, loading, error } = useAgentStats();
-  // Fallback to realistic random numbers if no stats available
+  
+  // Use preview/mock data if user doesn't have access
+  const isPreview = !hasAccess && !accessLoading;
+  
+  // Fallback to realistic random numbers if no stats available or in preview mode
   const fallbackStats = {
     ...emptyAgentStats,
-    mu_media_edits: 124,
+    mu_media_edits: isPreview ? 87 : 124,
   };
   const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
+  
+  const agentConfig = AGENT_BY_ID["studio"];
   const [selectedMediaName, setSelectedMediaName] = useState<string>(mockMediaItems[0]?.filename ?? "");
   const [customFilenames, setCustomFilenames] = useState<Record<string, string>>({});
   // Multi-asset state
@@ -2193,6 +2203,16 @@ export default function StudioPage() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
+    // Disable in preview mode
+    if (isPreview) {
+      setMuMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "File upload is disabled in preview mode. Upgrade to Advanced or Elite tier to unlock full Studio agent features." },
+      ]);
+      event.target.value = "";
+      return;
+    }
+    
     // Handle multiple files
     for (let i = 0; i < files.length; i++) {
       await addAssetFromFile(files[i]);
@@ -2397,6 +2417,15 @@ export default function StudioPage() {
         }
       }
       
+      // Disable in preview mode
+      if (isPreview) {
+        setStudioMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "This feature requires an Advanced or Elite subscription. Upgrade to unlock full Studio agent access." },
+        ]);
+        return;
+      }
+
       if (!authToken && process.env.NODE_ENV === "production") {
         setStudioMessages((prev) => [
           ...prev,
@@ -2896,6 +2925,12 @@ export default function StudioPage() {
 
   return (
     <div className="space-y-8">
+      {isPreview && (
+        <PreviewBanner 
+          agentName={agentConfig.label} 
+          requiredTier={agentConfig.requiredTier}
+        />
+      )}
       <header>
         <p className="text-sm uppercase tracking-widest text-slate-500">Studio agent</p>
         <h1 className="text-3xl font-semibold">Media & branding workspace</h1>
