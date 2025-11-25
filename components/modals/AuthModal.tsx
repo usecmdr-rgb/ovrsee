@@ -18,8 +18,8 @@ const AuthModal = () => {
     closeAuthModal();
     // Wait a moment for state updates and localStorage to be written
     await new Promise(resolve => setTimeout(resolve, 150));
-    // Navigate to dashboard
-    router.push("/dashboard");
+    // Navigate to dashboard with all agents
+    router.push("/app");
   };
 
   return (
