@@ -5,15 +5,7 @@ import { useDeviceType } from "@/hooks/useDeviceType";
 
 type DeviceContextValue = ReturnType<typeof useDeviceType>;
 
-const defaultValue: DeviceContextValue = {
-  deviceType: "desktop",
-  viewportWidth: 1440,
-  isMobile: false,
-  isTablet: false,
-  isDesktop: true,
-};
-
-const DeviceContext = createContext<DeviceContextValue>(defaultValue);
+const DeviceContext = createContext<DeviceContextValue | undefined>(undefined);
 
 export const DeviceProvider = ({ children }: { children: React.ReactNode }) => {
   const value = useDeviceType();
