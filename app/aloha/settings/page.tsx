@@ -13,7 +13,7 @@ import {
 import type { AlohaProfile } from "@/types/database";
 import type { UserPhoneNumber } from "@/types/database";
 import CallForwardingModal from "@/components/modals/CallForwardingModal";
-import { Search, Shuffle, X, Check } from "lucide-react";
+import { Search, Shuffle, X, Check, Brain, MessageSquare, Heart, Shield, Users, Clock } from "lucide-react";
 
 export default function AlohaSettingsPage() {
   const router = useRouter();
@@ -606,6 +606,241 @@ export default function AlohaSettingsPage() {
               />
             ))}
           </div>
+        </section>
+
+        {/* Conversation Intelligence Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Conversation Intelligence</h2>
+              <p className="text-xs text-slate-500">Automatic intent classification & understanding</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Question Types</p>
+              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                <p>Pricing, Availability, Services, Appointments, Hours, Location, Contact, Policy</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Statement Types</p>
+              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                <p>Complaint, Praise, Confusion, Correction, Information Provided</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Emotional States</p>
+              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                <p>Happy, Neutral, Upset, Angry, Stressed, Frustrated, Confused</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Call Flow Intents</p>
+              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                <p>Wants Callback, Wants Email, Wants Appointment, Wants Reschedule</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Natural Voice Dynamics Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Natural Voice Dynamics</h2>
+              <p className="text-xs text-slate-500">Human-like speech patterns & flow</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              Micro pauses between clauses for natural flow
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              Context-aware natural disfluencies (sparingly)
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              Softening phrases for gentle communication
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              Emotion-aware tone adjustments
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              Varies sentence lengths for natural rhythm
+            </li>
+          </ul>
+        </section>
+
+        {/* Emotional Intelligence Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+              <Heart className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Emotional Intelligence</h2>
+              <p className="text-xs text-slate-500">Empathetic response shaping based on caller emotions</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Upset Callers</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Gentle tone, acknowledgment, softer language</p>
+            </div>
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Angry Callers</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">De-escalation, neutral clarity, acknowledges frustration</p>
+            </div>
+            <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Stressed Callers</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Slow pace, reassurance, &quot;No worries&quot; phrases</p>
+            </div>
+            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Confused Callers</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Explicit guidance, broken-down instructions, clarifying phrases</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Communication Resilience Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+              <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Communication Resilience</h2>
+              <p className="text-xs text-slate-500">Handles connection issues & silence gracefully</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Bad Connection Detection</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Automatically detects low STT confidence and inaudible segments, prompts for repetition</p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Silence Handling</p>
+              <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1 ml-4">
+                <p>• 2-3 seconds: &quot;Are you still there?&quot;</p>
+                <p>• 6-7 seconds: &quot;It might be a quiet moment, no rush.&quot;</p>
+                <p>• 10+ seconds: Graceful call ending</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Talkative Caller Management</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Politely redirects long responses back to campaign goal</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Contact Memory Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Contact Memory</h2>
+              <p className="text-xs text-slate-500">Lightweight per-phone-number memory for personalized conversations</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300 mb-4">
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              Remembers caller name and basic preferences per phone number
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              Enforces do-not-call flags automatically
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              Adjusts greetings based on previous interactions
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              Tracks call frequency and outcomes
+            </li>
+          </ul>
+          
+          <Link
+            href="/aloha/contacts"
+            className="inline-block text-sm text-brand-accent hover:underline font-medium"
+          >
+            Manage Contacts →
+          </Link>
+        </section>
+
+        {/* End-of-Call Intelligence Section */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+              <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">End-of-Call Intelligence</h2>
+              <p className="text-xs text-slate-500">Graceful call endings with context awareness</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+          </div>
+          
+          <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+              Detects exit intent (explicit and implicit)
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+              Checks for additional needs before closing
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+              Context-aware closing messages (standard, upset, bad connection)
+            </li>
+            <li className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+              Respectful endings that honor caller&apos;s time
+            </li>
+          </ul>
         </section>
 
         {/* Save Button */}
