@@ -103,10 +103,10 @@ export async function syncSubscriptionFromStripe(
           canceled_at: canceledSubscription.canceled_at
             ? new Date(canceledSubscription.canceled_at * 1000).toISOString()
             : null,
-          trial_start: canceledSubscription.trial_start
+          trial_started_at: canceledSubscription.trial_start
             ? new Date(canceledSubscription.trial_start * 1000).toISOString()
             : null,
-          trial_end: canceledSubscription.trial_end
+          trial_ends_at: canceledSubscription.trial_end
             ? new Date(canceledSubscription.trial_end * 1000).toISOString()
             : null,
         });
@@ -154,10 +154,10 @@ export async function syncSubscriptionFromStripe(
       canceled_at: activeSubscription.canceled_at
         ? new Date(activeSubscription.canceled_at * 1000).toISOString()
         : null,
-      trial_start: activeSubscription.trial_start
+      trial_started_at: activeSubscription.trial_start
         ? new Date(activeSubscription.trial_start * 1000).toISOString()
         : null,
-      trial_end: activeSubscription.trial_end
+      trial_ends_at: activeSubscription.trial_end
         ? new Date(activeSubscription.trial_end * 1000).toISOString()
         : null,
     });

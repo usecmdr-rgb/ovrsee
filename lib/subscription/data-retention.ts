@@ -92,7 +92,7 @@ export async function getDataRetentionStatus(userId: string): Promise<{
       daysRemaining: null,
       reason: null,
       isExpired: false,
-      isDataCleared: subscription?.tier === "data_cleared",
+      isDataCleared: false,
     };
   }
 
