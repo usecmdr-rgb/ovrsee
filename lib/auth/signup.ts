@@ -50,9 +50,18 @@ export async function createUserAccount(data: SignupData) {
       id: userId,
       email: data.email,
       full_name: data.fullName || null,
+      avatar_url: null,
       company_name: data.companyName || null,
       subscription_tier: "free",
       subscription_status: "active",
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+      trial_started_at: null,
+      trial_ends_at: null,
+      trial_ended_at: null,
+      data_retention_expires_at: null,
+      data_retention_reason: null,
+      paid_canceled_at: null,
     };
 
     const { error: profileError } = await supabase
@@ -118,8 +127,19 @@ export async function ensureUserProfileAndSubscription(userId: string, email: st
     const profileData: ProfileInsert = {
       id: userId,
       email,
+      full_name: null,
+      avatar_url: null,
+      company_name: null,
       subscription_tier: "trial",
       subscription_status: "active",
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+      trial_started_at: null,
+      trial_ends_at: null,
+      trial_ended_at: null,
+      data_retention_expires_at: null,
+      data_retention_reason: null,
+      paid_canceled_at: null,
     };
 
     await supabase.from("profiles").insert(profileData);

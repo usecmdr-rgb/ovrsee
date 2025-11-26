@@ -136,6 +136,9 @@ export async function streamSpeech(
         });
 
         // Stream the response
+        if (!response.body) {
+          throw new Error("Response body is null");
+        }
         const reader = response.body.getReader();
         
         while (true) {
