@@ -99,7 +99,7 @@ const AppSidebar = () => {
     return [
       syncLink!,
       alohaLink!,
-      { href: "/app", label: summaryLabel, icon: LayoutDashboard, isLarge: true, agentKey: null },
+      { href: "/dashboard", label: summaryLabel, icon: LayoutDashboard, isLarge: true, agentKey: null },
       studioLink!,
       insightLink!,
     ];

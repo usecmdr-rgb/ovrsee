@@ -188,3 +188,4 @@ All logo assets have been successfully integrated into the OVRSEE codebase:
 **Status**: Ready for asset generation. Run `npm run generate:assets` (after installing sharp) to create PNG/ICO files from the SVG sources.
 
 
+

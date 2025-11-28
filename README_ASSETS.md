@@ -87,3 +87,4 @@ Favicon and OG image references are configured in `app/layout.tsx`:
 - All assets are vector-based for maximum quality
 
 
+

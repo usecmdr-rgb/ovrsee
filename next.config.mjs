@@ -66,12 +66,6 @@ const nextConfig = {
         destination: "/sync",
         permanent: true,
       },
-      // Redirect dashboard alias to canonical /app route
-      {
-        source: "/dashboard",
-        destination: "/app",
-        permanent: true,
-      },
     ];
   },
 };

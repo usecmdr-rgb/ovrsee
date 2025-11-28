@@ -210,3 +210,4 @@ COMMENT ON COLUMN business_knowledge_chunks.embedding IS 'Vector embedding for s
 
 
 
+

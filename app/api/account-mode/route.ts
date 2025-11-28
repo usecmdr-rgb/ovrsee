@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthFromRequest } from "@/lib/auth-helpers";
+import { getAuthenticatedUserFromRequest } from "@/lib/auth-helpers";
 import { getAccountModeForUser, getAccountMode, getActivationTimestamp, type DbUserRow } from "@/lib/account-mode";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { createErrorResponse } from "@/lib/validation";
@@ -7,11 +7,11 @@ import { createErrorResponse } from "@/lib/validation";
 /**
  * GET /api/account-mode
  * 
- * Returns the account mode for the authenticated user.
+ * Returns the account mode for the user (authenticated or unauthenticated).
  * 
  * SECURITY:
- * - Requires user authentication
- * - User can only access their own account mode
+ * - Unauthenticated users receive 'preview' mode
+ * - Authenticated users can only access their own account mode
  * 
  * Returns:
  * - mode: Account mode ('preview' | 'trial-active' | 'trial-expired' | 'subscribed')
@@ -19,8 +19,17 @@ import { createErrorResponse } from "@/lib/validation";
  */
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user - throws if not authenticated
-    const user = await requireAuthFromRequest(request);
+    // Get user if authenticated, but don't require auth
+    const user = await getAuthenticatedUserFromRequest(request);
+    
+    // If not authenticated, return preview mode
+    if (!user) {
+      return NextResponse.json({
+        mode: 'preview' as const,
+        activationTimestamp: null,
+      });
+    }
+    
     const userId = user.id;
 
     const supabase = getSupabaseServerClient();
@@ -109,16 +118,12 @@ export async function GET(request: NextRequest) {
       activationTimestamp,
     });
   } catch (error: any) {
-    // Handle authentication errors
-    if (error.message?.includes("Unauthorized")) {
-      return createErrorResponse("Authentication required", 401);
-    }
-
-    return createErrorResponse(
-      "Failed to fetch account mode",
-      500,
-      error
-    );
+    // If there's an error, default to preview mode for unauthenticated users
+    // This ensures the dashboard still works even if there are issues
+    return NextResponse.json({
+      mode: 'preview' as const,
+      activationTimestamp: null,
+    });
   }
 }
 

@@ -201,12 +201,14 @@ const Header = () => {
     { label: t("navHome"), href: "/" },
     { label: t("navPricing"), href: "/pricing" },
     { label: t("navAbout"), href: "/about" },
-    { label: t("navDashboard"), href: "/app" },
+    { label: t("navDashboard"), href: "/dashboard" },
   ], [t]);
 
   // Memoize handleAppClick to avoid recreating on every render
   const handleAppClick = useCallback((href: string) => {
-    if (href.startsWith("/app") && !isAuthenticated) {
+    // Allow /dashboard navigation even when unauthenticated (shows preview mode)
+    // Only block /app routes when unauthenticated
+    if (href.startsWith("/app") && !href.startsWith("/dashboard") && !isAuthenticated) {
       openAuthModal("login");
       setMobileMenuOpen(false);
       return;

@@ -96,7 +96,7 @@ export default function HomePage() {
         </div>
         <div className="mt-4 sm:mt-6 grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-4" role="list">
           {/* Aloha / Voice */}
-          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative" role="listitem">
+          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative flex flex-col" role="listitem">
             {fakeStats.aloha.alerts > 0 && (
               <div className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
                 {fakeStats.aloha.alerts}
@@ -106,26 +106,26 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Aloha / Voice</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {[
                 { label: t("calls"), value: fakeStats.aloha.calls },
                 { label: t("missed"), value: fakeStats.aloha.missed, alert: fakeStats.aloha.missed > 0 },
                 { label: t("appts"), value: fakeStats.aloha.appointments },
                 { label: "Alerts", value: fakeStats.aloha.alerts, alert: fakeStats.aloha.alerts > 0 },
               ].map((item) => (
-                <div key={item.label} className="relative text-center">
+                <div key={item.label} className="relative text-center min-w-0 flex flex-col items-center justify-center">
                   {item.alert && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-orange-500"></span>
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-orange-500 z-10"></span>
                   )}
-                  <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{item.label}</p>
-                  <p className="mt-1 text-xl sm:text-2xl">{item.value}</p>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">{item.label}</p>
+                  <p className="mt-1 text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-visible">{item.value}</p>
                 </div>
               ))}
             </div>
           </article>
 
           {/* Sync / Inbox */}
-          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative" role="listitem">
+          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative flex flex-col" role="listitem">
             {fakeStats.sync.alerts > 0 && (
               <div className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
                 {fakeStats.sync.alerts}
@@ -135,28 +135,28 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Sync / Inbox</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {[
                 { label: t("important"), value: fakeStats.sync.important, alert: true },
                 { label: t("paymentsBills"), value: fakeStats.sync.paymentsBills },
                 { label: t("invoices"), value: fakeStats.sync.invoices },
                 { label: t("missed"), value: fakeStats.sync.missed, alert: fakeStats.sync.missed > 0 },
               ].map((item) => (
-                <div key={item.label} className="relative text-center min-w-0">
+                <div key={item.label} className="relative text-center min-w-0 flex flex-col items-center justify-center">
                   {item.alert && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500"></span>
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 z-10"></span>
                   )}
-                  <p className="text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">
                     {item.label}
                   </p>
-                  <p className="mt-1 text-xl sm:text-2xl">{item.value}</p>
+                  <p className="mt-1 text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-visible">{item.value}</p>
                 </div>
               ))}
             </div>
           </article>
 
           {/* Studio / Media */}
-          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative" role="listitem">
+          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative flex flex-col" role="listitem">
             {fakeStats.studio.alerts > 0 && (
               <div className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white">
                 {fakeStats.studio.alerts}
@@ -166,18 +166,18 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Studio / Media</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {[
                 { label: "Impressions", value: fakeStats.studio.impressions.toLocaleString() },
                 { label: "Likes", value: fakeStats.studio.likes },
                 { label: "Reports", value: fakeStats.studio.reports, alert: true },
               ].map((item) => (
-                <div key={item.label} className="relative text-center">
+                <div key={item.label} className="relative text-center min-w-0 flex flex-col items-center justify-center">
                   {item.alert && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-violet-500"></span>
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-violet-500 z-10"></span>
                   )}
-                  <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{item.label}</p>
-                  <p className="mt-1 text-xl sm:text-2xl">{item.value}</p>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">{item.label}</p>
+                  <p className="mt-1 text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap overflow-visible">{item.value}</p>
                 </div>
               ))}
             </div>
@@ -187,7 +187,7 @@ export default function HomePage() {
           </article>
 
           {/* Insight / Data */}
-          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative" role="listitem">
+          <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative flex flex-col" role="listitem">
             {fakeStats.insight.alerts > 0 && (
               <div className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
                 {fakeStats.insight.alerts}
@@ -197,7 +197,7 @@ export default function HomePage() {
               <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Insight / Data</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" aria-label="Active"></span>
             </div>
-            <p className="mt-4 text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white text-center">{fakeStats.insight.insights}</p>
+            <p className="mt-4 text-lg sm:text-xl font-semibold text-slate-900 dark:text-white text-center whitespace-nowrap overflow-visible">{fakeStats.insight.insights}</p>
             <p className="text-xs text-slate-600 dark:text-slate-400 text-center">{t("betaInsightsGenerated")}</p>
             <div className="mt-2 flex items-center justify-center gap-1 text-xs text-slate-600 dark:text-slate-400">
               <span>3 new today</span>

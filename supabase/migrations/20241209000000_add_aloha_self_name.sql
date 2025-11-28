@@ -7,3 +7,4 @@ ADD COLUMN IF NOT EXISTS aloha_self_name TEXT;
 -- Add comment
 COMMENT ON COLUMN aloha_profiles.aloha_self_name IS 'Custom name the agent calls itself. If empty or null, defaults to "Aloha".';
 
+
