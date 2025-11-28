@@ -425,12 +425,14 @@ const Header = () => {
             </div>
           </div>
 
-          {/* Mobile navigation pills */}
-          <MobileNavPills
-            navItems={navItems}
-            pathname={pathname}
-            onItemClick={handleAppClick}
-          />
+          {/* Mobile navigation pills - hide on dashboard/app routes */}
+          {!(pathname === "/dashboard" || pathname === "/app" || pathname.startsWith("/app/")) && (
+            <MobileNavPills
+              navItems={navItems}
+              pathname={pathname}
+              onItemClick={handleAppClick}
+            />
+          )}
         </div>
       </header>
 
