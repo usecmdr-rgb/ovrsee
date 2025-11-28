@@ -3,6 +3,7 @@
 import { useDataRetention } from "@/hooks/useDataRetention";
 import { AlertTriangle, Clock, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useTranslation } from "@/hooks/useTranslation";
 
 /**
  * Data Retention Banner Component
@@ -21,6 +22,7 @@ export default function DataRetentionBanner() {
     retentionReason,
     loading,
   } = useDataRetention();
+  const t = useTranslation();
 
   if (loading) {
     return null;
@@ -40,15 +42,15 @@ export default function DataRetentionBanner() {
             <Trash2 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Previous chat history cleared
+                {t("dataRetentionPreviousHistoryCleared")}
               </h3>
               <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                Your previous chat history has been cleared due to inactivity. Your account and agents are still here.{" "}
+                {t("dataRetentionClearedDescription")}{" "}
                 <Link
                   href="/pricing"
                   className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                 >
-                  Choose a plan to continue using the app.
+                  {t("dataRetentionChoosePlan")}
                 </Link>
               </p>
             </div>
@@ -67,16 +69,17 @@ export default function DataRetentionBanner() {
             <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                Your free trial has ended
+                {t("dataRetentionTrialEnded")}
               </h3>
               <p className="mt-1 text-sm text-orange-700 dark:text-orange-300">
-                Your agents and chat history will be kept for{" "}
-                <strong>{daysRemaining} {daysRemaining === 1 ? "day" : "days"}</strong>. After that, your history will be cleared.{" "}
+                {t("dataRetentionTrialEndedDescription")
+                  .replace("{days}", String(daysRemaining || 0))
+                  .replace("{daysText}", daysRemaining === 1 ? t("dataRetentionDay") : t("dataRetentionDays"))}{" "}
                 <Link
                   href="/pricing"
                   className="font-medium underline hover:text-orange-900 dark:hover:text-orange-100"
                 >
-                  Choose a plan to keep everything and continue using the app.
+                  {t("dataRetentionChoosePlanKeepEverything")}
                 </Link>
               </p>
             </div>
@@ -88,7 +91,9 @@ export default function DataRetentionBanner() {
 
   // In retention window - paid canceled/paused
   if (isInRetentionWindow && (retentionReason === "paid_canceled" || retentionReason === "paid_paused")) {
-    const actionText = retentionReason === "paid_paused" ? "paused" : "canceled";
+    const actionText = retentionReason === "paid_paused" 
+      ? t("dataRetentionSubscriptionPaused") 
+      : t("dataRetentionSubscriptionCanceled");
     return (
       <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
@@ -96,16 +101,17 @@ export default function DataRetentionBanner() {
             <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                Your subscription is {actionText}
+                {actionText}
               </h3>
               <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-                Your agents and chat history will be kept for{" "}
-                <strong>{daysRemaining} {daysRemaining === 1 ? "day" : "days"}</strong>. After that, your history will be cleared.{" "}
+                {t("dataRetentionSubscriptionPausedDescription")
+                  .replace("{days}", String(daysRemaining || 0))
+                  .replace("{daysText}", daysRemaining === 1 ? t("dataRetentionDay") : t("dataRetentionDays"))}{" "}
                 <Link
                   href="/pricing"
                   className="font-medium underline hover:text-blue-900 dark:hover:text-blue-100"
                 >
-                  Reactivate your subscription to keep everything.
+                  {t("dataRetentionReactivate")}
                 </Link>
               </p>
             </div>
@@ -117,4 +123,11 @@ export default function DataRetentionBanner() {
 
   return null;
 }
+
+
+
+
+
+
+
 

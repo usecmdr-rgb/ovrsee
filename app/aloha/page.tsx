@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { mockCalls } from "@/lib/data";
 import type { CallRecord } from "@/types";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
@@ -20,6 +20,8 @@ import {
   Shield,
   Clock
 } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { UserPhoneNumber } from "@/types/database";
 
 const appointments = [
   { title: "Discovery call", when: "Fri - 9:30 AM", with: "Maria Gomez" },
@@ -51,17 +53,30 @@ export default function AlohaPage() {
   const [contactStats, setContactStats] = useState<ContactMemoryStats | null>(null);
   const [conversationStats, setConversationStats] = useState<ConversationStats | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "calls" | "contacts" | "analytics">("overview");
+  const [phoneNumber, setPhoneNumber] = useState<UserPhoneNumber | null>(null);
+  const t = useTranslation();
   
-  // Use preview/mock data if user doesn't have access
-  const isPreview = !hasAccess && !accessLoading;
+  // Wait for access to be determined before showing stats to prevent flashing
+  const isAccessReady = !accessLoading;
+  
+  // Use preview/mock data if user doesn't have access (only after access check is complete)
+  const isPreview = isAccessReady && !hasAccess;
   
   // Fallback to realistic random numbers if no stats available or in preview mode
-  const fallbackStats = {
-    ...emptyAgentStats,
-    alpha_calls_total: isPreview ? 156 : 247,
-    alpha_calls_missed: isPreview ? 5 : 8,
-    alpha_appointments: isPreview ? 18 : 32,
-  };
+  // Only show fallback stats when access check is complete to prevent number flashing
+  const fallbackStats = useMemo(() => {
+    if (!isAccessReady) {
+      // Return empty stats while loading to prevent flash
+      return emptyAgentStats;
+    }
+    return {
+      ...emptyAgentStats,
+      alpha_calls_total: isPreview ? 156 : 247,
+      alpha_calls_missed: isPreview ? 5 : 8,
+      alpha_appointments: isPreview ? 18 : 32,
+    };
+  }, [isPreview, isAccessReady]);
+  
   const latestStats = stats ?? fallbackStats;
   const answeredCalls = Math.max(latestStats.alpha_calls_total - latestStats.alpha_calls_missed, 0);
   const noStats = !stats && !loading && !error;
@@ -74,8 +89,23 @@ export default function AlohaPage() {
     if (hasAccess && !accessLoading) {
       fetchContactStats();
       fetchConversationStats();
+      fetchPhoneNumber();
     }
   }, [hasAccess, accessLoading]);
+
+  const fetchPhoneNumber = async () => {
+    try {
+      const response = await fetch("/api/telephony/twilio/active-number");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.phoneNumber) {
+          setPhoneNumber(data.phoneNumber);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching phone number:", err);
+    }
+  };
 
   const fetchContactStats = async () => {
     try {
@@ -122,8 +152,8 @@ export default function AlohaPage() {
       )}
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-sm uppercase tracking-widest text-slate-500">Aloha agent</p>
-          <h1 className="text-3xl font-semibold">Calls & appointments overview</h1>
+          <p className="text-sm uppercase tracking-widest text-slate-500">{t("alohaAgent")}</p>
+          <h1 className="text-3xl font-semibold">{t("callsAppointmentsOverview")}</h1>
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -131,60 +161,67 @@ export default function AlohaPage() {
             className="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
           >
             <Users className="w-4 h-4" />
-            Contacts
+            {t("alohaContacts")}
           </Link>
           <Link
             href="/aloha/settings"
             className="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
           >
             <Settings className="w-4 h-4" />
-            Settings
+            {t("alohaSettings")}
           </Link>
         </div>
       </header>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "overview"
-              ? "border-brand-accent text-brand-accent"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setActiveTab("calls")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "calls"
-              ? "border-brand-accent text-brand-accent"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          Call Logs
-        </button>
-        <button
-          onClick={() => setActiveTab("contacts")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "contacts"
-              ? "border-brand-accent text-brand-accent"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          Contact Memory
-        </button>
-        <button
-          onClick={() => setActiveTab("analytics")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === "analytics"
-              ? "border-brand-accent text-brand-accent"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          Conversation Analytics
-        </button>
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "overview"
+                ? "border-brand-accent text-brand-accent"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            }`}
+          >
+            {t("overview")}
+          </button>
+          <button
+            onClick={() => setActiveTab("calls")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "calls"
+                ? "border-brand-accent text-brand-accent"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            }`}
+          >
+            {t("callTranscripts")}
+          </button>
+          <button
+            onClick={() => setActiveTab("contacts")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "contacts"
+                ? "border-brand-accent text-brand-accent"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            }`}
+          >
+            {t("contactMemory")}
+          </button>
+          <button
+            onClick={() => setActiveTab("analytics")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "analytics"
+                ? "border-brand-accent text-brand-accent"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+            }`}
+          >
+            {t("conversationIntelligence")}
+          </button>
+        </div>
+        {(phoneNumber || isPreview) && (
+          <p className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 font-mono">
+            {isPreview ? "+1 (555) 123-4567" : phoneNumber?.phone_number}
+          </p>
+        )}
       </div>
 
       {/* Overview Tab */}
@@ -193,17 +230,17 @@ export default function AlohaPage() {
           {/* Key Stats */}
           <section className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Latest stats</p>
-              {loading && <p className="text-xs text-slate-500">Loading stats…</p>}
-              {error && <p className="text-xs text-red-500">Couldn&apos;t load stats</p>}
-              {noStats && <p className="text-xs text-slate-500">No stats yet</p>}
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("latestStats")}</p>
+              {loading && <p className="text-xs text-slate-500">{t("loadingStats")}</p>}
+              {error && <p className="text-xs text-red-500">{t("couldntLoadStats")}</p>}
+              {noStats && <p className="text-xs text-slate-500">{t("noStatsYet")}</p>}
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { label: "Total calls", value: latestStats.alpha_calls_total, icon: Phone },
-                { label: "Answered", value: answeredCalls, icon: MessageSquare },
-                { label: "Missed", value: latestStats.alpha_calls_missed, icon: Phone },
-                { label: "New appointments", value: latestStats.alpha_appointments, icon: Clock },
+                { label: t("totalCalls"), value: latestStats.alpha_calls_total, icon: Phone },
+                { label: t("answered"), value: answeredCalls, icon: MessageSquare },
+                { label: t("missed"), value: latestStats.alpha_calls_missed, icon: Phone },
+                { label: t("newAppointmentsLabel"), value: latestStats.alpha_appointments, icon: Clock },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/60">
                   <div className="flex items-center gap-2 mb-2">
@@ -225,33 +262,33 @@ export default function AlohaPage() {
                   <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Contact Memory</h3>
-                  <p className="text-xs text-slate-500">Lightweight per-phone-number memory</p>
+                  <h3 className="text-lg font-semibold">{t("alohaContactMemoryTitle")}</h3>
+                  <p className="text-xs text-slate-500">{t("alohaLightweightPerPhoneMemory")}</p>
                 </div>
               </div>
               {contactStats ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Total Contacts</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaTotalContacts")}</span>
                     <span className="text-lg font-semibold">{contactStats.totalContacts}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Do-Not-Call</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaDoNotCall")}</span>
                     <span className="text-lg font-semibold text-red-600">{contactStats.doNotCallCount}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Recently Contacted</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaRecentlyContacted")}</span>
                     <span className="text-lg font-semibold">{contactStats.recentlyContacted}</span>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Loading contact statistics...</p>
+                <p className="text-sm text-slate-500">{t("alohaLoadingContactStats")}</p>
               )}
               <Link
                 href="/aloha/contacts"
                 className="mt-4 inline-block text-sm text-brand-accent hover:underline"
               >
-                View all contacts →
+                {t("alohaViewAllContacts")}
               </Link>
             </div>
 
@@ -262,27 +299,27 @@ export default function AlohaPage() {
                   <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Conversation Intelligence</h3>
-                  <p className="text-xs text-slate-500">Intent classification & emotional intelligence</p>
+                  <h3 className="text-lg font-semibold">{t("alohaConversationIntelligence")}</h3>
+                  <p className="text-xs text-slate-500">{t("alohaConversationIntelligenceDescription")}</p>
                 </div>
               </div>
               {conversationStats ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Intent Accuracy</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaIntentClassificationAccuracy")}</span>
                     <span className="text-lg font-semibold">{conversationStats.intentAccuracy}%</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Empathy Used</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaEmpathyUsed")}</span>
                     <span className="text-lg font-semibold">{conversationStats.empathyUsed} calls</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600 dark:text-slate-300">Avg Duration</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">{t("alohaAverageConversationDuration")}</span>
                     <span className="text-lg font-semibold">{Math.floor(conversationStats.avgConversationDuration / 60)}m</span>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Loading conversation statistics...</p>
+                <p className="text-sm text-slate-500">{t("alohaLoadingConversationStats")}</p>
               )}
               <Link
                 href="/aloha?tab=analytics"
@@ -292,7 +329,7 @@ export default function AlohaPage() {
                 }}
                 className="mt-4 inline-block text-sm text-brand-accent hover:underline"
               >
-                View analytics →
+                {t("alohaViewAnalytics")}
               </Link>
             </div>
 
@@ -303,22 +340,22 @@ export default function AlohaPage() {
                   <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Natural Voice Dynamics</h3>
-                  <p className="text-xs text-slate-500">Human-like pauses, disfluencies & tone</p>
+                  <h3 className="text-lg font-semibold">{t("alohaNaturalVoiceDynamics")}</h3>
+                  <p className="text-xs text-slate-500">{t("alohaHumanLikePauses")}</p>
                 </div>
               </div>
               <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  Micro pauses for natural flow
+                  {t("alohaMicroPauses")}
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  Context-aware disfluencies
+                  {t("alohaContextAwareDisfluencies")}
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  Emotion-aware adjustments
+                  {t("alohaEmotionAwareAdjustments")}
                 </li>
               </ul>
             </div>
@@ -330,22 +367,22 @@ export default function AlohaPage() {
                   <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Communication Resilience</h3>
-                  <p className="text-xs text-slate-500">Handles connection issues & silence gracefully</p>
+                  <h3 className="text-lg font-semibold">{t("alohaCommunicationResilience")}</h3>
+                  <p className="text-xs text-slate-500">{t("alohaHandlesConnectionIssues")}</p>
                 </div>
               </div>
               <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
-                  Bad connection detection
+                  {t("alohaBadConnectionDetection")}
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
-                  Silence handling (2s, 6s, 10s)
+                  {t("alohaSilenceHandling")}
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
-                  Talkative caller management
+                  {t("alohaTalkativeCallerManagement")}
                 </li>
               </ul>
             </div>
@@ -365,11 +402,11 @@ export default function AlohaPage() {
               <table className="w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="py-2">Caller</th>
-                    <th className="py-2">Time</th>
-                    <th className="py-2">Outcome</th>
-                    <th className="py-2">Sentiment</th>
-                    <th className="py-2">Summary</th>
+                    <th className="py-2">{t("alohaCaller")}</th>
+                    <th className="py-2">{t("alohaTime")}</th>
+                    <th className="py-2">{t("alohaOutcome")}</th>
+                    <th className="py-2">{t("alohaSentiment")}</th>
+                    <th className="py-2">{t("alohaSummary")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -386,7 +423,7 @@ export default function AlohaPage() {
                       <td className="py-3 capitalize">{call.outcome}</td>
                       <td className="py-3">
                         <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          Neutral
+                          {t("alohaNeutral")}
                         </span>
                       </td>
                       <td className="py-3 text-slate-500">{call.summary}</td>
@@ -398,17 +435,17 @@ export default function AlohaPage() {
           </div>
           <div className="space-y-6">
             <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <h3 className="text-lg font-semibold mb-3">Call details</h3>
+              <h3 className="text-lg font-semibold mb-3">{t("callDetails")}</h3>
               {selectedCall ? (
                 <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
                   <p>
-                    <span className="font-semibold">Caller:</span> {selectedCall.caller}
+                    <span className="font-semibold">{t("alohaCaller")}:</span> {selectedCall.caller}
                   </p>
                   <p>
-                    <span className="font-semibold">Outcome:</span> {selectedCall.outcome}
+                    <span className="font-semibold">{t("alohaOutcome")}:</span> {selectedCall.outcome}
                   </p>
                   <div>
-                    <span className="font-semibold">Intent Classification:</span>
+                    <span className="font-semibold">{t("alohaIntentClassification")}:</span>
                     <div className="mt-1 space-y-1">
                       <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                         Question: Services
@@ -416,22 +453,22 @@ export default function AlohaPage() {
                     </div>
                   </div>
                   <div>
-                    <span className="font-semibold">Emotional State:</span>
+                    <span className="font-semibold">{t("alohaEmotionalState")}:</span>
                     <div className="mt-1">
                       <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                        Neutral
+                        {t("alohaNeutral")}
                       </span>
                     </div>
                   </div>
                   <p>
-                    <span className="font-semibold">Summary:</span> {selectedCall.summary}
+                    <span className="font-semibold">{t("alohaSummary")}:</span> {selectedCall.summary}
                   </p>
                   <p>
-                    <span className="font-semibold">Contact:</span> {selectedCall.contact}
+                    <span className="font-semibold">{t("contact")}:</span> {selectedCall.contact}
                   </p>
                   {selectedCall.appointmentLink && (
                     <a href={selectedCall.appointmentLink} className="text-brand-accent underline">
-                      View appointment
+                      {t("alohaViewAppointment")}
                     </a>
                   )}
                   <div className="rounded-2xl bg-slate-100/70 p-3 dark:bg-slate-800/60">
@@ -439,15 +476,15 @@ export default function AlohaPage() {
                     <p className="text-xs">{selectedCall.transcript}</p>
                   </div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">
-                    Follow up: {selectedCall.followUp}
+                    {t("followUp")}: {selectedCall.followUp}
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Select a call to inspect the transcript.</p>
+                <p className="text-sm text-slate-500">{t("alohaSelectCallToInspect")}</p>
               )}
             </div>
             <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <h3 className="text-lg font-semibold mb-3">Upcoming appointments</h3>
+              <h3 className="text-lg font-semibold mb-3">{t("upcomingAppointments")}</h3>
               <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
                 {appointments.map((appt) => (
                   <li key={appt.title} className="rounded-2xl border border-slate-100 p-3 dark:border-slate-800">
@@ -509,11 +546,11 @@ export default function AlohaPage() {
             <>
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-                  <h3 className="text-lg font-semibold mb-4">Sentiment Distribution</h3>
+                  <h3 className="text-lg font-semibold mb-4">{t("alohaSentimentDistribution")}</h3>
                   <div className="space-y-3">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>Happy</span>
+                        <span>{t("alohaHappy")}</span>
                         <span>{conversationStats.sentimentDistribution.happy}%</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2 dark:bg-slate-700">
@@ -522,7 +559,7 @@ export default function AlohaPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>Neutral</span>
+                        <span>{t("alohaNeutral")}</span>
                         <span>{conversationStats.sentimentDistribution.neutral}%</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2 dark:bg-slate-700">
@@ -531,7 +568,7 @@ export default function AlohaPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>Upset</span>
+                        <span>{t("alohaUpset")}</span>
                         <span>{conversationStats.sentimentDistribution.upset}%</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2 dark:bg-slate-700">
@@ -540,7 +577,7 @@ export default function AlohaPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>Angry</span>
+                        <span>{t("alohaAngry")}</span>
                         <span>{conversationStats.sentimentDistribution.angry}%</span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2 dark:bg-slate-700">
@@ -550,18 +587,18 @@ export default function AlohaPage() {
                   </div>
                 </div>
                 <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-                  <h3 className="text-lg font-semibold mb-4">Conversation Metrics</h3>
+                  <h3 className="text-lg font-semibold mb-4">{t("alohaConversationMetrics")}</h3>
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">Intent Classification Accuracy</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">{t("alohaIntentClassificationAccuracy")}</p>
                       <p className="text-3xl font-semibold">{conversationStats.intentAccuracy}%</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">Average Conversation Duration</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">{t("alohaAverageConversationDuration")}</p>
                       <p className="text-3xl font-semibold">{Math.floor(conversationStats.avgConversationDuration / 60)}m {conversationStats.avgConversationDuration % 60}s</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">Empathy Used</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">{t("alohaEmpathyUsed")}</p>
                       <p className="text-3xl font-semibold">{conversationStats.empathyUsed} calls</p>
                     </div>
                   </div>
@@ -569,7 +606,7 @@ export default function AlohaPage() {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">Loading conversation analytics...</p>
+            <p className="text-sm text-slate-500">{t("alohaLoadingConversationAnalytics")}</p>
           )}
         </div>
       )}

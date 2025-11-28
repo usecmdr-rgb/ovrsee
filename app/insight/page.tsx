@@ -1,25 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
 import { useAgentAccess } from "@/hooks/useAgentAccess";
+import { useAccountMode } from "@/hooks/useAccountMode";
 import PreviewBanner from "@/components/agent/PreviewBanner";
+import TrialExpiredBanner from "@/components/agent/TrialExpiredBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
+import { useTranslation } from "@/hooks/useTranslation";
 import DailyBriefCard from "@/components/insight/DailyBriefCard";
 import InsightGenerator from "@/components/insight/InsightGenerator";
 import WorkflowManager from "@/components/insight/WorkflowManager";
 
-const timeframes = [
-  { id: "daily", label: "Daily" },
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-];
+// timeframes will be defined inside component to use translations
 
-const mockRollupStats = {
-  daily: { calls: 32, emails: 6, media: 4, timeSaved: 2.5 },
-  weekly: { calls: 180, emails: 28, media: 17, timeSaved: 12 },
-  monthly: { calls: 680, emails: 90, media: 52, timeSaved: 48 },
-};
+// Calculate rollup stats from actual agent stats
+function calculateRollupStats(stats: typeof emptyAgentStats, timeframe: "daily" | "weekly" | "monthly") {
+  // For now, use daily stats for all timeframes
+  // In the future, this could aggregate by timeframe from historical data
+  const multiplier = timeframe === "daily" ? 1 : timeframe === "weekly" ? 7 : 30;
+  
+  return {
+    calls: stats.alpha_calls_total * multiplier,
+    emails: (stats.xi_important_emails || 0) * multiplier, // Use important emails for email count
+    media: stats.mu_media_edits * multiplier,
+    timeSaved: (stats.alpha_calls_total * 5 + (stats.xi_important_emails || 0) * 2) * multiplier / 60, // Estimate: 5 min per call, 2 min per email
+  };
+}
 
 const insights = {
   daily: [
@@ -39,21 +46,48 @@ const insights = {
 export default function InsightPage() {
   const { hasAccess, isLoading: accessLoading } = useAgentAccess("insight");
   const { stats, loading, error } = useAgentStats();
+  const { mode: accountMode, loading: accountModeLoading } = useAccountMode();
+  const t = useTranslation();
   
-  // Use preview/mock data if user doesn't have access
-  const isPreview = !hasAccess && !accessLoading;
+  // Wait for access and account mode to be determined before showing stats to prevent flashing
+  const isAccessReady = !accessLoading && !accountModeLoading;
   
-  // Fallback to realistic random numbers if no stats available or in preview mode
-  const fallbackStats = {
-    ...emptyAgentStats,
-    beta_insights_count: isPreview ? 28 : 42,
-  };
-  const latestStats = stats ?? fallbackStats;
+  // Determine if user is in preview mode based on account mode
+  const isPreview = isAccessReady && accountMode === 'preview';
+  
+  // Check if trial is expired
+  const isTrialExpired = isAccessReady && accountMode === 'trial-expired';
+  
+  // Determine which stats to use based on account mode
+  // Preview mode: use mock data
+  // Trial-active, trial-expired, subscribed: use real stats (starting from 0 at activation)
+  const latestStats = useMemo(() => {
+    if (!isAccessReady) {
+      // Return empty stats while loading to prevent flash
+      return emptyAgentStats;
+    }
+    // In preview mode, use mock stats
+    // In all other modes (trial-active, trial-expired, subscribed), use real stats
+    if (isPreview) {
+      return {
+        ...emptyAgentStats,
+        beta_insights_count: 28, // Mock number for preview
+      };
+    }
+    // Use real stats (will be 0 if no activity since activation)
+    return stats ?? emptyAgentStats;
+  }, [isAccessReady, isPreview, stats]);
   const noStats = !stats && !loading && !error;
-  const [timeframe, setTimeframe] = useState<keyof typeof mockRollupStats>("daily");
-  const current = mockRollupStats[timeframe];
+  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
+  const current = useMemo(() => calculateRollupStats(latestStats, timeframe), [latestStats, timeframe]);
 
   const agentConfig = AGENT_BY_ID["insight"];
+  
+  const timeframes = useMemo(() => [
+    { id: "daily", label: t("daily") },
+    { id: "weekly", label: t("weekly") },
+    { id: "monthly", label: t("monthly") },
+  ], [t]);
 
   return (
     <div className="space-y-6">
@@ -63,10 +97,13 @@ export default function InsightPage() {
           requiredTier={agentConfig.requiredTier}
         />
       )}
+      {isTrialExpired && (
+        <TrialExpiredBanner />
+      )}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-widest text-slate-500">Insight agent</p>
-          <h1 className="text-3xl font-semibold">Business intelligence rollup</h1>
+          <p className="text-sm uppercase tracking-widest text-slate-500">{t("insightAgent")}</p>
+          <h1 className="text-3xl font-semibold">{t("businessIntelligenceRollup")}</h1>
         </div>
         <div className="flex gap-2 rounded-full border border-slate-200 p-1 text-sm font-semibold dark:border-slate-800">
           {timeframes.map((group) => (
@@ -86,42 +123,42 @@ export default function InsightPage() {
       </header>
       <section className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Latest insight count</p>
-          {loading && <span className="text-xs text-slate-500">Loading stats…</span>}
-          {error && <span className="text-xs text-red-500">Couldn&apos;t load stats</span>}
-          {noStats && <span className="text-xs text-slate-500">No stats yet</span>}
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("insightLatestInsightCount")}</p>
+          {loading && <span className="text-xs text-slate-500">{t("loadingStats")}</span>}
+          {error && <span className="text-xs text-red-500">{t("couldntLoadStats")}</span>}
+          {noStats && <span className="text-xs text-slate-500">{t("noStatsYet")}</span>}
         </div>
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 p-4 text-center dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Insights generated</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightInsightsGenerated")}</p>
           <p className="mt-2 text-3xl font-semibold">{latestStats.beta_insights_count}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">Insight has generated {latestStats.beta_insights_count} insights this period.</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("insightHasGenerated")} {latestStats.beta_insights_count} {t("insightInsightsThisPeriod")}</p>
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Calls</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightCalls")}</p>
           <p className="mt-2 text-2xl">{current.calls}</p>
-          <p className="text-xs text-slate-500">from Aloha</p>
+          <p className="text-xs text-slate-500">{t("insightFromAloha")}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Emails</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightEmails")}</p>
           <p className="mt-2 text-2xl">{current.emails}</p>
-          <p className="text-xs text-slate-500">from Sync</p>
+          <p className="text-xs text-slate-500">{t("insightFromSync")}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Media items</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightMediaItems")}</p>
           <p className="mt-2 text-2xl">{current.media}</p>
-          <p className="text-xs text-slate-500">from Studio</p>
+          <p className="text-xs text-slate-500">{t("insightFromStudio")}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Time saved</p>
-          <p className="mt-2 text-2xl">{current.timeSaved} hrs</p>
-          <p className="text-xs text-slate-500">Insight estimate</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightTimeSaved")}</p>
+          <p className="mt-2 text-2xl">{current.timeSaved} {t("insightHrs")}</p>
+          <p className="text-xs text-slate-500">{t("insightInsightEstimate")}</p>
         </div>
       </section>
       <section className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-          <h2 className="text-lg font-semibold">Insights</h2>
+          <h2 className="text-lg font-semibold">{t("insights")}</h2>
           <div className="mt-2 space-y-2">
             {insights[timeframe].map((text) => (
               <div key={text} className="rounded-xl border border-slate-100 bg-white/80 p-3 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
@@ -131,7 +168,7 @@ export default function InsightPage() {
           </div>
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-          <h2 className="text-lg font-semibold">Calls vs Emails</h2>
+          <h2 className="text-lg font-semibold">{t("insightCallsVsEmails")}</h2>
           <div className="mt-2 grid h-32 grid-cols-6 items-end gap-2">
             {[8, 12, 6, 10, 7, 11].map((height, index) => (
               <div key={index} className="space-y-1 text-center">
@@ -141,7 +178,7 @@ export default function InsightPage() {
             ))}
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Placeholder chart. Swap with real analytics (Recharts, Chart.js, etc.).
+            {t("insightPlaceholderChart")}
           </p>
         </div>
       </section>
@@ -149,7 +186,7 @@ export default function InsightPage() {
       {/* Insight Intelligence Features - Disabled in preview mode */}
       {!isPreview && (
         <section className="mt-4">
-          <h2 className="text-xl font-semibold mb-4">Insight Intelligence</h2>
+          <h2 className="text-xl font-semibold mb-4">{t("insightIntelligence")}</h2>
           <div className="grid gap-4 lg:grid-cols-2">
             <DailyBriefCard />
             <InsightGenerator />
@@ -163,10 +200,10 @@ export default function InsightPage() {
         <section className="mt-4">
           <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-12 text-center dark:border-slate-700 dark:bg-slate-900/20">
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-              Interactive features are disabled in preview mode
+              {t("insightInteractiveFeaturesDisabled")}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-500">
-              Upgrade to Elite tier to unlock Daily Brief, Insight Generator, and Workflow Manager
+              {t("insightUpgradeToElite")}
             </p>
           </div>
         </section>

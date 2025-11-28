@@ -51,30 +51,25 @@ export default function PricingTable() {
   const { hasUsedTrial, isOnTrial, isTrialExpired, canStartTrial, loading: trialStatusLoading } = useTrialStatus();
 
   const tiers = useMemo(() => {
-    const syncAgent = agents.find(a => a.key === "sync");
-    const alohaAgent = agents.find(a => a.key === "aloha");
-    const studioAgent = agents.find(a => a.key === "studio");
-    const insightAgent = agents.find(a => a.key === "insight");
-    
     return [
       {
         id: "basic" as TierId,
         name: t("basic"),
         price: formatPrice(BASE_PRICES.basic, language),
-        description: `Start with ${syncAgent?.name || "Sync"}.`,
+        description: t("startWithXi"),
       },
       {
         id: "advanced" as TierId,
         name: t("advanced"),
         price: formatPrice(BASE_PRICES.advanced, language),
         badge: t("mostPopular"),
-        description: `Unlock ${alohaAgent?.name || "Aloha"} & ${studioAgent?.name || "Studio"}.`,
+        description: t("unlockAlphaMu"),
       },
       {
         id: "elite" as TierId,
         name: t("elite"),
         price: formatPrice(BASE_PRICES.elite, language),
-        description: `Everything, plus ${insightAgent?.name || "Insight"}.`,
+        description: t("everythingPlusBeta"),
       },
     ];
   }, [t, language]);
@@ -89,28 +84,28 @@ export default function PricingTable() {
     return [
       {
         label: syncAgent?.name || "Sync",
-        sublabel: syncAgent?.role || t("agentRoleEmailCalendar"),
+        sublabel: t("agentRoleEmailCalendar"),
         basic: true,
         advanced: true,
         elite: true,
       },
       {
         label: alohaAgent?.name || "Aloha",
-        sublabel: alohaAgent?.role || t("agentRoleAssistant"),
+        sublabel: t("agentRoleAssistant"),
         basic: false,
         advanced: true,
         elite: true,
       },
       {
         label: studioAgent?.name || "Studio",
-        sublabel: studioAgent?.role || t("agentRoleMediaBranding"),
+        sublabel: t("agentRoleMediaBranding"),
         basic: false,
         advanced: true,
         elite: true,
       },
       {
         label: insightAgent?.name || "Insight",
-        sublabel: insightAgent?.role || t("agentRoleBusinessInsights"),
+        sublabel: t("agentRoleBusinessInsights"),
         basic: false,
         advanced: false,
         elite: true,
@@ -140,12 +135,12 @@ export default function PricingTable() {
 
     // Check if user has already used trial (client-side check, but server enforces)
     if (hasUsedTrial) {
-      setError("You have already used your free trial. Please choose a paid plan to continue.");
+      setError(t("subscriptionTrialAlreadyUsedDescription"));
       return;
     }
 
     if (isOnTrial) {
-      setError("You already have an active trial.");
+      setError(t("subscriptionCurrentlyOnTrial"));
       return;
     }
 
@@ -181,16 +176,16 @@ export default function PricingTable() {
       if (!response.ok) {
         // Handle specific error codes
         if (data.code === "TRIAL_ALREADY_USED") {
-          setError(data.message || "You have already used your free trial. Please choose a paid plan to continue.");
+          setError(data.message || t("subscriptionTrialAlreadyUsedDescription"));
         } else {
-          setError(data.error || "Failed to start trial");
+          setError(data.error || t("pleaseTryAgain"));
         }
         return;
       }
 
       setTrialStarted(true);
     } catch (err: any) {
-      setError(err.message || "Something went wrong. Please try again.");
+      setError(err.message || t("pleaseTryAgain"));
     } finally {
       setLoading(false);
     }
@@ -310,20 +305,20 @@ export default function PricingTable() {
             <div className="flex items-center justify-center gap-2 mb-2">
               <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Trial Already Used
+                {t("subscriptionTrialAlreadyUsed")}
               </p>
             </div>
             <p className="text-xs text-amber-600 dark:text-amber-500">
-              You have already used your free trial. Please choose a paid plan to continue using CommanderX.
+              {t("subscriptionTrialAlreadyUsedDescription")}
             </p>
           </div>
         ) : isOnTrial && !trialStatusLoading ? (
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 text-center dark:border-blue-800 dark:bg-blue-900/20 max-w-md">
             <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
-              ✨ You&apos;re currently on a free trial
+              ✨ {t("subscriptionCurrentlyOnTrial")}
             </p>
             <p className="mt-1 text-xs text-blue-600 dark:text-blue-500">
-              Your trial is active. Choose a plan to continue after it ends.
+              {t("subscriptionTrialActiveDescription")}
             </p>
           </div>
         ) : (

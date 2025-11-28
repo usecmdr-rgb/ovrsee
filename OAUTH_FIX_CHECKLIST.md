@@ -12,7 +12,7 @@ This is often the issue! You need to configure the OAuth consent screen:
    - Click "CONFIGURE CONSENT SCREEN"
    - Choose "External" (for testing)
    - Fill in:
-     - App name: "CommanderX" (or any name)
+     - App name: "OVRSEE" (or any name)
      - User support email: Your email
      - Developer contact: Your email
    - Click "SAVE AND CONTINUE"

@@ -135,3 +135,10 @@ export async function getOpenKnowledgeGaps(userId: string) {
   return data || [];
 }
 
+
+
+
+
+
+
+

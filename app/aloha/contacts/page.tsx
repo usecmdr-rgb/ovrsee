@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Users, Phone, Clock, X, Check, Search, Shield } from "lucide-react";
+import { Users, Phone, Clock, X, Check, Search, Shield, Upload, Plus } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ContactProfile {
   id: string;
@@ -19,6 +20,7 @@ interface ContactProfile {
 
 export default function ContactsPage() {
   const router = useRouter();
+  const t = useTranslation();
   const [contacts, setContacts] = useState<ContactProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +29,12 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState<ContactProfile | null>(null);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState("");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactNotes, setNewContactNotes] = useState("");
+  const [newContactDoNotCall, setNewContactDoNotCall] = useState(false);
+  const [savingNewContact, setSavingNewContact] = useState(false);
+  const [uploadingCsv, setUploadingCsv] = useState(false);
 
   useEffect(() => {
     fetchContacts();
@@ -35,44 +43,16 @@ export default function ContactsPage() {
   const fetchContacts = async () => {
     try {
       setLoading(true);
-      // TODO: Create API endpoint for contacts
-      // For now, use mock data
-      const mockContacts: ContactProfile[] = [
-        {
-          id: "1",
-          phone_number: "+15551234567",
-          name: "Maria Gomez",
-          notes: "Prefers evening calls",
-          do_not_call: false,
-          last_called_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          last_outcome: "feedback_collected",
-          times_contacted: 3,
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: "2",
-          phone_number: "+15559876543",
-          name: "Alex Chen",
-          notes: "Likes short calls",
-          do_not_call: false,
-          last_called_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          last_outcome: "rescheduled",
-          times_contacted: 5,
-          created_at: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: "3",
-          phone_number: "+15551111111",
-          name: null,
-          notes: null,
-          do_not_call: true,
-          last_called_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-          last_outcome: "do_not_call",
-          times_contacted: 1,
-          created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
-      setContacts(mockContacts);
+      setError(null);
+
+      const res = await fetch("/api/aloha/contacts");
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load contacts");
+      }
+
+      setContacts(data.contacts || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -80,54 +60,227 @@ export default function ContactsPage() {
     }
   };
 
+  const handleAddContact = async () => {
+    try {
+      if (!newContactPhone.trim()) {
+        setError("Phone number is required to add a contact.");
+        return;
+      }
+
+      setSavingNewContact(true);
+      setError(null);
+
+      const res = await fetch("/api/aloha/contacts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contact: {
+            phoneNumber: newContactPhone.trim(),
+            name: newContactName.trim() || null,
+            notes: newContactNotes.trim() || null,
+            doNotCall: newContactDoNotCall,
+          },
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add contact");
+      }
+
+      await fetchContacts();
+
+      setNewContactName("");
+      setNewContactPhone("");
+      setNewContactNotes("");
+      setNewContactDoNotCall(false);
+    } catch (err: any) {
+      setError(err.message || "Failed to add contact");
+    } finally {
+      setSavingNewContact(false);
+    }
+  };
+
+  const handleCsvUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingCsv(true);
+      setError(null);
+
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+      if (lines.length === 0) {
+        throw new Error("CSV file is empty.");
+      }
+
+      const headerLine = lines[0];
+      const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
+
+      const phoneIndex =
+        headers.indexOf("phone") >= 0
+          ? headers.indexOf("phone")
+          : headers.indexOf("phone_number") >= 0
+          ? headers.indexOf("phone_number")
+          : headers.indexOf("phonenumber");
+
+      if (phoneIndex < 0) {
+        throw new Error("CSV must include a 'phone' or 'phone_number' column.");
+      }
+
+      const nameIndex = headers.indexOf("name");
+      const notesIndex = headers.indexOf("notes");
+      const dncIndex =
+        headers.indexOf("do_not_call") >= 0
+          ? headers.indexOf("do_not_call")
+          : headers.indexOf("donotcall");
+
+      const contactsToUpload = lines
+        .slice(1)
+        .map((line) => line.split(","))
+        .map((cols) => {
+          const phone = cols[phoneIndex]?.trim();
+          if (!phone) return null;
+
+          const name = nameIndex >= 0 ? cols[nameIndex]?.trim() || undefined : undefined;
+          const notes = notesIndex >= 0 ? cols[notesIndex]?.trim() || undefined : undefined;
+          const dncRaw = dncIndex >= 0 ? cols[dncIndex]?.trim().toLowerCase() : "";
+          const doNotCall =
+            dncRaw === "true" || dncRaw === "1" || dncRaw === "yes" || dncRaw === "y";
+
+          return {
+            phoneNumber: phone,
+            name,
+            notes,
+            doNotCall,
+          };
+        })
+        .filter(Boolean) as {
+        phoneNumber: string;
+        name?: string;
+        notes?: string;
+        doNotCall?: boolean;
+      }[];
+
+      if (contactsToUpload.length === 0) {
+        throw new Error("No valid contacts found in CSV.");
+      }
+
+      const res = await fetch("/api/aloha/contacts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contacts: contactsToUpload,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload contacts");
+      }
+
+      await fetchContacts();
+      event.target.value = "";
+    } catch (err: any) {
+      setError(err.message || "Failed to upload contacts from CSV.");
+    } finally {
+      setUploadingCsv(false);
+    }
+  };
+
   const handleToggleDoNotCall = async (contact: ContactProfile) => {
     try {
-      // TODO: Call API to update do-not-call flag
-      setContacts(contacts.map(c => 
-        c.id === contact.id 
-          ? { ...c, do_not_call: !c.do_not_call }
-          : c
-      ));
+      setError(null);
+
+      const res = await fetch("/api/aloha/contacts", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: contact.id,
+          doNotCall: !contact.do_not_call,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update contact");
+      }
+
+      const updated = data.contact as ContactProfile;
+
+      setContacts((prev) =>
+        prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+      );
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setError(err.message || "Failed to update contact");
     }
   };
 
   const handleUpdateNotes = async (contact: ContactProfile) => {
     try {
-      // TODO: Call API to update notes
-      setContacts(contacts.map(c => 
-        c.id === contact.id 
-          ? { ...c, notes: notesValue }
-          : c
-      ));
+      setError(null);
+
+      const res = await fetch("/api/aloha/contacts", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: contact.id,
+          notes: notesValue,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update notes");
+      }
+
+      const updated = data.contact as ContactProfile;
+
+      setContacts((prev) =>
+        prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+      );
       setEditingNotes(false);
       setSelectedContact(null);
+      setNotesValue("");
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setError(err.message || "Failed to update notes");
     }
   };
 
   const getOutcomeLabel = (outcome: string | null) => {
     if (!outcome) return null;
     const labels: Record<string, string> = {
-      feedback_collected: "Feedback Collected",
-      rescheduled: "Rescheduled",
-      not_interested: "Not Interested",
-      asked_for_email: "Asked for Email",
-      do_not_call: "Do Not Call",
-      no_answer: "No Answer",
+      feedback_collected: t("feedbackCollected"),
+      rescheduled: t("rescheduled"),
+      not_interested: t("notInterested"),
+      asked_for_email: t("askedForEmail"),
+      do_not_call: t("doNotCallLabel"),
+      no_answer: t("noAnswer"),
     };
     return labels[outcome] || outcome;
   };
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "Never";
+    if (!dateString) return t("never");
     const date = new Date(dateString);
     const daysAgo = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysAgo === 0) return "Today";
-    if (daysAgo === 1) return "Yesterday";
-    if (daysAgo < 7) return `${daysAgo} days ago`;
+    if (daysAgo === 0) return t("today");
+    if (daysAgo === 1) return t("yesterday");
+    if (daysAgo < 7) return `${daysAgo} ${t("daysAgo")}`;
     return date.toLocaleDateString();
   };
 
@@ -148,7 +301,7 @@ export default function ContactsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-slate-500">Loading contacts...</p>
+        <p className="text-slate-500">{t("loadingContacts")}</p>
       </div>
     );
   }
@@ -160,12 +313,12 @@ export default function ContactsPage() {
           onClick={() => router.back()}
           className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-4"
         >
-          ← Back
+          {t("back")}
         </button>
-        <p className="text-sm uppercase tracking-widest text-slate-500">Aloha Agent</p>
-        <h1 className="text-3xl font-semibold">Contact Memory</h1>
+        <p className="text-sm uppercase tracking-widest text-slate-500">{t("alohaAgent")}</p>
+        <h1 className="text-3xl font-semibold">{t("contactMemoryPage")}</h1>
         <p className="text-slate-600 dark:text-slate-300 mt-2">
-          Manage contact profiles and do-not-call preferences. Aloha remembers basic info about callers for personalized conversations.
+          {t("manageContactProfiles")}
         </p>
       </header>
 
@@ -175,18 +328,116 @@ export default function ContactsPage() {
         </div>
       )}
 
+      {/* Add Contacts */}
+      <div className="grid gap-4 lg:grid-cols-[2fr,1.5fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                {t("addContactForCalls")}
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                {t("addIndividualContacts")}
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                {t("nameOptional")}
+              </label>
+              <input
+                type="text"
+                value={newContactName}
+                onChange={(e) => setNewContactName(e.target.value)}
+                placeholder="Maria Gomez"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                {t("phoneNumberRequired")}
+              </label>
+              <input
+                type="tel"
+                value={newContactPhone}
+                onChange={(e) => setNewContactPhone(e.target.value)}
+                placeholder="+1 555 123 4567"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              />
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t("notesOptional")}
+            </label>
+            <textarea
+              value={newContactNotes}
+              onChange={(e) => setNewContactNotes(e.target.value)}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+              placeholder={t("notesPlaceholder")}
+            />
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={newContactDoNotCall}
+                onChange={(e) => setNewContactDoNotCall(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-accent focus:ring-brand-accent"
+              />
+              {t("markAsDoNotCall")}
+            </label>
+            <button
+              onClick={handleAddContact}
+              disabled={savingNewContact}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-brand-accent text-white hover:bg-brand-accent/90 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+            >
+              {savingNewContact ? t("saving") : t("addContact")}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center gap-2 mb-2">
+            <Upload className="w-4 h-4" />
+            <h2 className="text-lg font-semibold">{t("uploadContactsCsv")}</h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            {t("uploadCsvDescription")}{" "}
+            <span className="font-mono">phone</span>,{" "}
+            <span className="font-mono">name</span>,{" "}
+            <span className="font-mono">notes</span>, {t("and")}{" "}
+            <span className="font-mono">do_not_call</span>. {t("alohaWillNormalize")}
+          </p>
+          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors">
+            <Upload className="w-4 h-4" />
+            <span>{uploadingCsv ? t("uploading") : t("chooseCsvFile")}</span>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              className="hidden"
+              disabled={uploadingCsv}
+            />
+          </label>
+        </div>
+      </div>
+
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Total Contacts</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">{t("totalContacts")}</p>
           <p className="text-2xl font-semibold">{contacts.length}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Do-Not-Call</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">{t("doNotCall")}</p>
           <p className="text-2xl font-semibold text-red-600">{contacts.filter(c => c.do_not_call).length}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Recently Contacted</p>
+          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">{t("recentlyContacted")}</p>
           <p className="text-2xl font-semibold">{contacts.filter(c => c.last_called_at && new Date(c.last_called_at).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000).length}</p>
         </div>
       </div>
@@ -199,7 +450,7 @@ export default function ContactsPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name or phone number..."
+            placeholder={t("searchByNameOrPhone")}
             className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
           />
         </div>
@@ -212,7 +463,7 @@ export default function ContactsPage() {
                 : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
             }`}
           >
-            All
+            {t("all")}
           </button>
           <button
             onClick={() => setFilter("do_not_call")}
@@ -222,7 +473,7 @@ export default function ContactsPage() {
                 : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
             }`}
           >
-            Do-Not-Call
+            {t("doNotCall")}
           </button>
           <button
             onClick={() => setFilter("recent")}
@@ -232,7 +483,7 @@ export default function ContactsPage() {
                 : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
             }`}
           >
-            Recent
+            {t("recent")}
           </button>
         </div>
       </div>
@@ -241,7 +492,7 @@ export default function ContactsPage() {
       {filteredContacts.length === 0 ? (
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-12 text-center dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-slate-500">
-            {searchQuery ? "No contacts match your search." : "No contacts found."}
+            {searchQuery ? t("noContactsMatch") : t("noContactsFound")}
           </p>
         </div>
       ) : (
@@ -255,12 +506,12 @@ export default function ContactsPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-lg font-semibold">
-                      {contact.name || "Unknown Contact"}
+                      {contact.name || t("unknownContact")}
                     </h3>
                     {contact.do_not_call && (
                       <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 flex items-center gap-1">
                         <Shield className="w-3 h-3" />
-                        Do Not Call
+                        {t("doNotCallLabel")}
                       </span>
                     )}
                   </div>
@@ -271,21 +522,21 @@ export default function ContactsPage() {
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      <span>Last called: {formatDate(contact.last_called_at)}</span>
+                      <span>{t("lastCalled")} {formatDate(contact.last_called_at)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Users className="w-4 h-4" />
-                      <span>Contacted {contact.times_contacted} time{contact.times_contacted !== 1 ? "s" : ""}</span>
+                      <span>{t("contacted")} {contact.times_contacted} {contact.times_contacted !== 1 ? t("timesPlural") : t("times")}</span>
                     </div>
                   </div>
                   {contact.notes && (
                     <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
-                      <strong>Notes:</strong> {contact.notes}
+                      <strong>{t("notes")}</strong> {contact.notes}
                     </p>
                   )}
                   {contact.last_outcome && (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500">Last Outcome:</span>
+                      <span className="text-xs text-slate-500">{t("lastOutcome")}</span>
                       <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                         {getOutcomeLabel(contact.last_outcome)}
                       </span>
@@ -301,7 +552,7 @@ export default function ContactsPage() {
                     }}
                     className="px-3 py-1.5 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-colors"
                   >
-                    Edit Notes
+                    {t("editNotes")}
                   </button>
                   <button
                     onClick={() => handleToggleDoNotCall(contact)}
@@ -314,12 +565,12 @@ export default function ContactsPage() {
                     {contact.do_not_call ? (
                       <>
                         <Check className="w-4 h-4 inline mr-1" />
-                        Allow Calls
+                        {t("allowCalls")}
                       </>
                     ) : (
                       <>
                         <X className="w-4 h-4 inline mr-1" />
-                        Block Calls
+                        {t("blockCalls")}
                       </>
                     )}
                   </button>
@@ -334,19 +585,19 @@ export default function ContactsPage() {
       {selectedContact && editingNotes && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-md w-full">
-            <h2 className="text-xl font-semibold mb-4">Edit Notes</h2>
+            <h2 className="text-xl font-semibold mb-4">{t("editNotesModal")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Notes</label>
+                <label className="block text-sm font-medium mb-2">{t("notesOptional")}</label>
                 <textarea
                   value={notesValue}
                   onChange={(e) => setNotesValue(e.target.value)}
                   rows={4}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:border-slate-700 dark:bg-slate-800"
-                  placeholder="Add short notes about this contact (e.g., 'prefers evenings', 'likes short calls')"
+                  placeholder={t("addShortNotes")}
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Keep notes short and non-sensitive. Examples: preferences, call channel preference, basic call outcomes.
+                  {t("keepNotesShort")}
                 </p>
               </div>
             </div>
@@ -355,7 +606,7 @@ export default function ContactsPage() {
                 onClick={() => handleUpdateNotes(selectedContact)}
                 className="px-6 py-3 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors"
               >
-                Save Notes
+                {t("saveNotes")}
               </button>
               <button
                 onClick={() => {
@@ -365,7 +616,7 @@ export default function ContactsPage() {
                 }}
                 className="px-6 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </div>

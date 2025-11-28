@@ -61,7 +61,7 @@ If you can't find the Client ID in Google Cloud Console:
 2. Click **"+ CREATE CREDENTIALS"** → **"OAuth client ID"**
 3. If prompted, configure OAuth consent screen first
 4. Application type: **"Web application"**
-5. Name: "CommanderX Gmail Client"
+5. Name: "OVRSEE Gmail Client"
 6. **Authorized redirect URIs:** Add:
    ```
    http://localhost:3001/api/gmail/callback

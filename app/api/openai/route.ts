@@ -5,7 +5,8 @@ export async function GET() {
 
   return NextResponse.json({
     ok: !!key,
-    value: key ? `sk-${key.slice(3, 8)}...${key.slice(-4)}` : null,
+    // Do not expose any part of the key to the client
+    hasKey: !!key,
   });
 }
 

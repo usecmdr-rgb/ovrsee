@@ -179,8 +179,10 @@ async function queryStudio(question: string, timeframe: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: InsightRequest = await request.json();
-    const { question, timeframe = "today" } = body;
+    const body: InsightRequest & { language?: string } = await request.json();
+    const { question, timeframe = "today", language } = body;
+    // Note: Language parameter is accepted but not yet used in this endpoint.
+    // Future enhancement: Generate insights in the user's preferred language.
 
     if (!question) {
       return NextResponse.json(

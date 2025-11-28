@@ -1,94 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthFromRequest } from "@/lib/auth-helpers";
+import { openai } from "@/lib/openai";
 import {
   getVoiceProfileByKey,
-  isValidVoiceKey,
-  DEFAULT_VOICE_KEY,
+  getVoicePreviewScript,
   type AlohaVoiceKey,
 } from "@/lib/aloha/voice-profiles";
-import { openai } from "@/lib/openai";
+import { requireAuthFromRequest } from "@/lib/auth-helpers";
 
 /**
  * POST /api/aloha/voice-preview
  * 
- * Generates a voice preview using OpenAI TTS with the selected voice profile.
+ * Generates a voice preview audio file dynamically using the user's display name.
  * 
- * Body:
- * - voice_key: AlohaVoiceKey
- * 
- * Returns:
- * - ok: boolean
- * - audioUrl: string (data URL or blob URL)
+ * Request body:
+ * - voiceKey: AlohaVoiceKey
+ * - displayName: string
  */
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication
+    // Check authentication
     await requireAuthFromRequest(request);
+  } catch (authError: any) {
+    // Return 401 for authentication errors
+    return NextResponse.json(
+      { ok: false, error: authError.message || "Unauthorized" },
+      { status: 401 }
+    );
+  }
 
+  try {
     const body = await request.json();
-    const { voice_key } = body;
+    const { voiceKey, displayName } = body;
 
-    // Validate voice_key
-    if (!voice_key || typeof voice_key !== "string") {
+    if (!voiceKey) {
       return NextResponse.json(
-        { error: "voice_key is required" },
+        { ok: false, error: "voiceKey is required" },
         { status: 400 }
       );
     }
 
-    if (!isValidVoiceKey(voice_key)) {
+    if (!displayName || !displayName.trim()) {
       return NextResponse.json(
-        { error: `Invalid voice_key: ${voice_key}` },
+        { ok: false, error: "displayName is required" },
         { status: 400 }
       );
     }
 
     // Get voice profile
-    const voiceProfile = getVoiceProfileByKey(voice_key as AlohaVoiceKey);
+    const voiceProfile = getVoiceProfileByKey(voiceKey as AlohaVoiceKey);
+    
+    // Get preview text with display name
+    const previewText = getVoicePreviewScript(
+      voiceKey as AlohaVoiceKey,
+      displayName
+    );
 
-    // Preview text
-    const previewText =
-      "Hi, I'm Aloha. This is how I'll sound when I speak with your customers.";
+    // Generate audio using OpenAI TTS
+    const ttsResponse = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: voiceProfile.openaiVoiceId as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer",
+      response_format: "mp3",
+      input: previewText,
+    });
+    const audioBuffer = Buffer.from(await ttsResponse.arrayBuffer());
 
-    // Generate speech using OpenAI TTS
-    try {
-      const response = await openai.audio.speech.create({
-        model: "tts-1", // or "tts-1-hd" for higher quality
-        voice: voiceProfile.openaiVoiceId as
-          | "alloy"
-          | "echo"
-          | "fable"
-          | "onyx"
-          | "nova"
-          | "shimmer",
-        input: previewText,
-      });
-
-      // Convert response to buffer
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      // Convert to base64 data URL
-      const base64 = buffer.toString("base64");
-      const audioUrl = `data:audio/mp3;base64,${base64}`;
-
-      return NextResponse.json({
-        ok: true,
-        audioUrl,
-      });
-    } catch (ttsError: any) {
-      console.error("Error generating TTS preview:", ttsError);
-      return NextResponse.json(
-        {
-          error: "Failed to generate voice preview",
-          details: ttsError.message,
-        },
-        { status: 500 }
-      );
-    }
+    return new NextResponse(audioBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Accept-Ranges": "bytes",
+      },
+    });
   } catch (error: any) {
-    console.error("Error in POST /api/aloha/voice-preview:", error);
+    console.error("Error generating voice preview:", error);
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      { ok: false, error: error.message || "Failed to generate voice preview" },
       { status: 500 }
     );
   }

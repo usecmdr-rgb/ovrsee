@@ -1,7 +1,7 @@
 # Test User Credentials - Basic Tier
 
 ## User Account
-- **Email:** `test.basic@commanderx.test`
+- **Email:** `test.basic@ovrsee.test`
 - **Password:** `TestBasic123!`
 
 ## Subscription Details
@@ -31,7 +31,7 @@ node scripts/create-test-user.js
 1. **Create the user in Supabase Auth:**
    - Go to Supabase Dashboard → Authentication → Users
    - Click "Add User" → "Create new user"
-   - Email: `test.basic@commanderx.test`
+   - Email: `test.basic@ovrsee.test`
    - Password: `TestBasic123!`
    - Auto-confirm email: ✅
 

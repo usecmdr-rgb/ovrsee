@@ -122,6 +122,11 @@ async function fetchStudioData() {
 
 export async function POST(request: NextRequest) {
   try {
+    const body: { language?: string } = await request.json().catch(() => ({}));
+    const { language } = body;
+    // Note: Language parameter is accepted but not yet used in this endpoint.
+    // Future enhancement: Generate brief content in the user's preferred language.
+    
     // Fetch data from all agents
     const [alohaData, syncData, studioData] = await Promise.all([
       fetchAlohaData(),

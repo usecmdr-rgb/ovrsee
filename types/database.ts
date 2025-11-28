@@ -254,3 +254,17 @@ export type UserPhoneNumberUpdate = Partial<Omit<UserPhoneNumber, "id" | "user_i
   updated_at?: string;
 };
 
+/**
+ * User OpenAI keys table (per-user BYO key)
+ */
+export interface UserOpenAIKey {
+  id: string; // UUID
+  user_id: string; // UUID, references auth.users.id
+  provider: "openai";
+  api_key: string;
+  is_active: boolean;
+  created_at: string; // ISO timestamp
+  updated_at: string; // ISO timestamp
+}
+
+

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Calendar, Check, X, AlertCircle, Loader2 } from "lucide-react";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { useAppState } from "@/context/AppStateContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Modal from "@/components/ui/Modal";
@@ -29,6 +30,7 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const { supabase } = useSupabase();
   const { isAuthenticated, openAuthModal, language } = useAppState();
+  const t = useTranslation();
   const [loading, setLoading] = useState(true);
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,15 +38,7 @@ export default function SubscriptionPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [upgrading, setUpgrading] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      openAuthModal("login");
-      return;
-    }
-    fetchSubscriptionData();
-  }, [isAuthenticated]);
-
-  const fetchSubscriptionData = async () => {
+  const fetchSubscriptionData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -54,7 +48,7 @@ export default function SubscriptionPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.user) {
-        setError("Please log in to view your subscription");
+        setError(t("pleaseLogIn"));
         setLoading(false);
         return;
       }
@@ -63,16 +57,24 @@ export default function SubscriptionPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to load subscription details");
+        throw new Error(data.error || t("loadingSubscriptionDetails"));
       }
 
       setSubscriptionData(data);
     } catch (err: any) {
-      setError(err.message || "Failed to load subscription details. Please try again.");
+      setError(err.message || t("pleaseTryAgain"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, t]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      openAuthModal("login");
+      return;
+    }
+    fetchSubscriptionData();
+  }, [isAuthenticated, fetchSubscriptionData, openAuthModal]);
 
   const handleUpgradeDowngrade = async (tier: TierId) => {
     try {
@@ -101,14 +103,14 @@ export default function SubscriptionPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create checkout session");
+        throw new Error(data.error || t("pleaseTryAgain"));
       }
 
       if (data.url) {
         window.location.href = data.url;
       }
     } catch (err: any) {
-      alert(err.message || "Failed to start checkout. Please try again.");
+      alert(err.message || t("pleaseTryAgain"));
       setUpgrading(null);
     }
   };
@@ -138,15 +140,15 @@ export default function SubscriptionPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to cancel subscription");
+        throw new Error(data.error || t("pleaseTryAgain"));
       }
 
       setShowCancelModal(false);
       // Refresh subscription data
       await fetchSubscriptionData();
-      alert("Your subscription has been scheduled for cancellation at the end of the billing period.");
+      alert(t("subscriptionCanceledMessage"));
     } catch (err: any) {
-      alert(err.message || "Failed to cancel subscription. Please try again.");
+      alert(err.message || t("pleaseTryAgain"));
     } finally {
       setCanceling(false);
     }
@@ -175,7 +177,7 @@ export default function SubscriptionPage() {
       const { url, error } = await response.json();
 
       if (error) {
-        alert("Failed to open customer portal. Please try again.");
+        alert(t("billingFailedToOpenPortal"));
         return;
       }
 
@@ -183,7 +185,7 @@ export default function SubscriptionPage() {
         window.location.href = url;
       }
     } catch (error) {
-      alert("Failed to open customer portal. Please try again.");
+      alert(t("billingFailedToOpenPortal"));
     }
   };
 
@@ -217,7 +219,7 @@ export default function SubscriptionPage() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading subscription details...</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("loadingSubscriptionDetails")}</p>
         </div>
       </div>
     );
@@ -227,9 +229,9 @@ export default function SubscriptionPage() {
     <div className="mx-auto max-w-6xl space-y-8 py-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-semibold">Subscription & Billing</h1>
+        <h1 className="text-3xl font-semibold">{t("subscriptionBilling")}</h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Manage your subscription plan, payment methods, and billing information.
+          {t("manageSubscriptionPlan")}
         </p>
       </div>
 
@@ -243,7 +245,7 @@ export default function SubscriptionPage() {
             onClick={fetchSubscriptionData}
             className="mt-3 text-sm text-red-600 underline dark:text-red-400"
           >
-            Try again
+            {t("tryAgain")}
           </button>
         </div>
       )}
@@ -252,32 +254,32 @@ export default function SubscriptionPage() {
       {subscriptionData && (
         <Card>
           <CardHeader>
-            <CardTitle>Current Plan</CardTitle>
-            <CardDescription>Your active subscription details</CardDescription>
+            <CardTitle>{t("currentPlan")}</CardTitle>
+            <CardDescription>{t("activeSubscriptionDetails")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-xl font-semibold">{getTierDisplayName(currentTier)}</h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Status:{" "}
+                  {t("status")}{" "}
                   <span className="font-medium capitalize">
-                    {subscriptionData.subscription.status || "Inactive"}
+                    {subscriptionData.subscription.status || t("inactive")}
                   </span>
                 </p>
                 {subscriptionData.subscription.currentPeriodEnd && (
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Renews on: {formatDate(subscriptionData.subscription.currentPeriodEnd)}
+                    {t("renewsOn")} {formatDate(subscriptionData.subscription.currentPeriodEnd)}
                   </p>
                 )}
                 {subscriptionData.subscription.cancelAtPeriodEnd && (
                   <p className="mt-2 text-sm font-medium text-amber-600 dark:text-amber-400">
-                    Subscription will cancel at the end of the billing period
+                    {t("subscriptionWillCancel")}
                   </p>
                 )}
                 {subscriptionData.subscription.trialEnd && (
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Trial ends: {formatDate(subscriptionData.subscription.trialEnd)}
+                    {t("trialEnds")} {formatDate(subscriptionData.subscription.trialEnd)}
                   </p>
                 )}
               </div>
@@ -286,7 +288,7 @@ export default function SubscriptionPage() {
                   <p className="text-2xl font-semibold">
                     {formatPrice(BASE_PRICES[currentTier], language)}
                   </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">per month</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{t("perMonth")}</p>
                 </div>
               )}
             </div>
@@ -304,15 +306,15 @@ export default function SubscriptionPage() {
                           {subscriptionData.paymentMethod.last4}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Expires {subscriptionData.paymentMethod.expMonth}/
+                          {t("subscriptionExpires")} {subscriptionData.paymentMethod.expMonth}/
                           {subscriptionData.paymentMethod.expYear}
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-medium">No payment method on file</p>
+                        <p className="text-sm font-medium">{t("noPaymentMethod")}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Add a payment method to continue your subscription
+                          {t("addPaymentMethodToContinue")}
                         </p>
                       </>
                     )}
@@ -323,7 +325,7 @@ export default function SubscriptionPage() {
                   variant="secondary"
                   className="text-sm"
                 >
-                  {subscriptionData.paymentMethod ? "Update" : "Add Payment Method"}
+                  {subscriptionData.paymentMethod ? t("update") : t("addPaymentMethod")}
                 </Button>
               </div>
             </div>
@@ -336,7 +338,7 @@ export default function SubscriptionPage() {
                   variant="secondary"
                   className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950"
                 >
-                  Cancel Subscription
+                  {t("cancelSubscription")}
                 </Button>
               </div>
             )}
@@ -346,7 +348,7 @@ export default function SubscriptionPage() {
 
       {/* Available Plans */}
       <div>
-        <h2 className="mb-6 text-2xl font-semibold">Available Plans</h2>
+        <h2 className="mb-6 text-2xl font-semibold">{t("availablePlans")}</h2>
         <div className="grid gap-6 md:grid-cols-3">
           {(["basic", "advanced", "elite"] as TierId[]).map((tier) => {
             const isCurrent = isCurrentTier(tier);
@@ -358,11 +360,11 @@ export default function SubscriptionPage() {
 
             let description = "";
             if (tier === "basic") {
-              description = `Start with ${syncAgent?.name || "Sync"}.`;
+              description = `${t("startWith")} ${syncAgent?.name || t("agentSync")}.`;
             } else if (tier === "advanced") {
-              description = `Unlock ${alohaAgent?.name || "Aloha"} & ${studioAgent?.name || "Studio"}.`;
+              description = `${t("unlock")} ${alohaAgent?.name || t("agentAloha")} & ${studioAgent?.name || t("agentStudio")}.`;
             } else {
-              description = `Everything, plus ${insightAgent?.name || "Insight"}.`;
+              description = `${t("everythingPlus")} ${insightAgent?.name || t("agentInsight")}.`;
             }
 
             return (
@@ -377,7 +379,7 @@ export default function SubscriptionPage() {
                 {isCurrent && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-900">
-                      Current Plan
+                      {t("currentPlanBadge")}
                     </span>
                   </div>
                 )}
@@ -409,14 +411,14 @@ export default function SubscriptionPage() {
                     variant={isCurrent ? "secondary" : "default"}
                   >
                     {isUpgrading
-                      ? "Processing..."
+                      ? t("processing")
                       : isCurrent
-                        ? "Current Plan"
+                        ? t("currentPlanBadge")
                         : currentTier && BASE_PRICES[tier] > BASE_PRICES[currentTier as TierId]
-                          ? "Upgrade"
+                          ? t("upgrade")
                           : currentTier && BASE_PRICES[tier] < BASE_PRICES[currentTier as TierId]
-                            ? "Downgrade"
-                            : "Select Plan"}
+                            ? t("downgrade")
+                            : t("selectPlan")}
                   </Button>
                 </CardContent>
               </Card>
@@ -427,20 +429,20 @@ export default function SubscriptionPage() {
 
       {/* Cancel Confirmation Modal */}
       <Modal
-        title="Cancel Subscription"
-        description="Are you sure you want to cancel your subscription?"
+        title={t("cancelSubscriptionTitle")}
+        description={t("cancelSubscriptionConfirm")}
         open={showCancelModal}
         onClose={() => setShowCancelModal(false)}
       >
         <div className="space-y-4">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
             <p className="text-sm text-amber-800 dark:text-amber-200">
-              <strong>What happens when you cancel:</strong>
+              <strong>{t("whatHappensWhenCancel")}</strong>
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-300">
-              <li>You&apos;ll continue to have access until the end of your current billing period</li>
-              <li>Your subscription will not renew automatically</li>
-              <li>You can reactivate your subscription at any time before the period ends</li>
+              <li>{t("continueAccessUntilEnd")}</li>
+              <li>{t("willNotRenew")}</li>
+              <li>{t("canReactivate")}</li>
             </ul>
           </div>
           <div className="flex gap-3">
@@ -449,7 +451,7 @@ export default function SubscriptionPage() {
               disabled={canceling}
               className="flex-1 bg-rose-600 hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-600"
             >
-              {canceling ? "Canceling..." : "Yes, Cancel Subscription"}
+              {canceling ? t("canceling") : t("yesCancelSubscription")}
             </Button>
             <Button
               onClick={() => setShowCancelModal(false)}
@@ -457,7 +459,7 @@ export default function SubscriptionPage() {
               className="flex-1"
               disabled={canceling}
             >
-              Keep Subscription
+              {t("keepSubscription")}
             </Button>
           </div>
         </div>

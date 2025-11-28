@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "You are Studio, the CommanderX media agent. Given a user request and an image, reply with ONE concise edit prompt for an image model.",
+            "You are Studio, the OVRSEE media agent. Given a user request and an image, reply with ONE concise edit prompt for an image model.",
         },
         {
           role: "user",

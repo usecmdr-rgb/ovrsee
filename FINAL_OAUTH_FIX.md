@@ -20,7 +20,7 @@ Since the current one isn't working, let's create a brand new one:
 4. If you see "OAuth consent screen" warning:
    - Click "CONFIGURE CONSENT SCREEN"
    - Choose "External"
-   - App name: "CommanderX"
+   - App name: "OVRSEE"
    - Support email: your email
    - Click "SAVE AND CONTINUE"
    - **Add Scopes:**
@@ -35,7 +35,7 @@ Since the current one isn't working, let's create a brand new one:
    - Click "BACK TO DASHBOARD"
 5. Now create OAuth client:
    - Application type: **"Web application"**
-   - Name: "CommanderX Gmail Client"
+   - Name: "OVRSEE Gmail Client"
    - **Authorized redirect URIs:** 
      ```
      http://localhost:3001/api/gmail/callback

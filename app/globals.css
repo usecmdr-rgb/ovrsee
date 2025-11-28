@@ -20,45 +20,53 @@ html[data-device="mobile"] {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 font-sans;
+  @apply bg-white text-slate-900 font-sans;
   overflow-x: hidden;
 }
 
 .dark body {
-  @apply bg-slate-950 text-slate-100;
+  @apply bg-black text-slate-100;
 }
 
 * {
   @apply transition-colors duration-200;
 }
 
-.cx-logo {
-  @apply font-semibold tracking-tight;
-}
-
-.cx-logo span { display: inline-block; }
-
-@keyframes cxReveal {
-  0% { letter-spacing: 0.1rem; opacity: 1; }
-  40% { letter-spacing: 0.5rem; opacity: 0.9; }
-  70% { letter-spacing: 0.2rem; opacity: 1; }
-  100% { letter-spacing: 0.1rem; opacity: 1; }
-}
-
-.cx-logo-animated {
-  animation: cxReveal 6s ease-in-out infinite;
-}
 
 .modal-overlay {
   @apply fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50;
 }
 
 .modal-panel {
-  @apply w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800;
+  @apply rounded-2xl bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800;
 }
 
 .scroll-area {
   @apply overflow-y-auto;
+}
+
+/* Screen reader only - visually hidden but accessible to assistive tech */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
 }
 
 /* Improve touch targets on mobile */

@@ -148,3 +148,10 @@ export function getTimeWindowSummary(config: TimeWindowConfig): string {
   return `Calls allowed: ${daysStr} ${config.allowedCallStartTime}–${config.allowedCallEndTime} [${config.timezone}]`;
 }
 
+
+
+
+
+
+
+

@@ -10,6 +10,8 @@ import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAgentAccess } from "@/hooks/useAgentAccess";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
+import { useTranslation } from "@/hooks/useTranslation";
+import { getLanguageFromLocale } from "@/lib/localization";
 import type { ConnectedAccountType } from "@/types";
 import { Download, Facebook, Instagram, Maximize2, X, Plus, Trash2, Bold, Italic, Underline, Sparkles, Send, Linkedin, Globe, Check, Loader2, SlidersHorizontal, Wand2, Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, ChevronDown, ChevronUp, Type, Image as ImageIcon, Video, ArrowUp, ArrowDown } from "lucide-react";
 
@@ -1872,17 +1874,29 @@ function StudioCropPanel({
 export default function StudioPage() {
   const { hasAccess, isLoading: accessLoading } = useAgentAccess("studio");
   const [activeTab, setActiveTab] = useState<"edit" | "analytics">("edit");
-  const { businessInfo } = useAppState();
+  const { businessInfo, language } = useAppState();
   const { stats, loading, error } = useAgentStats();
+  const t = useTranslation();
   
-  // Use preview/mock data if user doesn't have access
-  const isPreview = !hasAccess && !accessLoading;
+  // Wait for access to be determined before showing stats to prevent flashing
+  const isAccessReady = !accessLoading;
+  
+  // Use preview/mock data if user doesn't have access (only after access check is complete)
+  const isPreview = isAccessReady && !hasAccess;
   
   // Fallback to realistic random numbers if no stats available or in preview mode
-  const fallbackStats = {
-    ...emptyAgentStats,
-    mu_media_edits: isPreview ? 87 : 124,
-  };
+  // Only show fallback stats when access check is complete to prevent number flashing
+  const fallbackStats = useMemo(() => {
+    if (!isAccessReady) {
+      // Return empty stats while loading to prevent flash
+      return emptyAgentStats;
+    }
+    return {
+      ...emptyAgentStats,
+      mu_media_edits: isPreview ? 87 : 124,
+    };
+  }, [isPreview, isAccessReady]);
+  
   const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
   
@@ -1892,9 +1906,7 @@ export default function StudioPage() {
   // Multi-asset state
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
-  const [muMessages, setMuMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
-    { role: "assistant", content: "Drop an image and tell me how bold or subtle you want it." },
-  ]);
+  const [muMessages, setMuMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [muInput, setMuInput] = useState("");
   const [muLoading, setMuLoading] = useState(false);
   const [muRecommendedFilters, setMuRecommendedFilters] = useState<string[]>([]);
@@ -1910,9 +1922,7 @@ export default function StudioPage() {
   });
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [socialMediaPosts, setSocialMediaPosts] = useState<SocialMediaPost[]>([]);
-  const [activityLog, setActivityLog] = useState([
-    { role: "agent", text: "Drop a file and tell me how subtle or bold you want it." },
-  ]);
+  const [activityLog, setActivityLog] = useState<Array<{ role: "agent" | "user"; text: string }>>([]);
   const [activeMode, setActiveMode] = useState<EditMode>("adjust");
   const [selectedAdjustment, setSelectedAdjustment] = useState<AdjustmentKey>("brightness");
   const [showAdvancedAdjustments, setShowAdvancedAdjustments] = useState(false);
@@ -2451,6 +2461,7 @@ export default function StudioPage() {
           agent: "studio",
           message,
           taskType: "default",
+          language: getLanguageFromLocale(language),
           context: {
             brightness: adjustments.brightness,
             contrast: adjustments.contrast,
@@ -2926,8 +2937,8 @@ export default function StudioPage() {
         />
       )}
       <header>
-        <p className="text-sm uppercase tracking-widest text-slate-500">Studio agent</p>
-        <h1 className="text-3xl font-semibold">Media & branding workspace</h1>
+        <p className="text-sm uppercase tracking-widest text-slate-500">{t("studioAgent")}</p>
+        <h1 className="text-3xl font-semibold">{t("mediaBrandingWorkspace")}</h1>
       </header>
 
       {/* Tab Bar */}
@@ -3021,12 +3032,12 @@ export default function StudioPage() {
             {/* Drop Image Area - Only shown when no assets are uploaded */}
             {assets.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-8 text-center text-sm shadow-sm dark:border-slate-700/80 dark:bg-slate-900/40 transition-all duration-500 ease-in-out">
-              <p className="font-semibold">Drop image or video</p>
+              <p className="font-semibold">{t("studioDropImageOrVideo")}</p>
               <p className="mt-2 text-slate-500">
-                Studio only applies filters, zoom, crops, and text overlays--never changes the original.
+                {t("studioOnlyApplies")}
               </p>
               <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900">
-                Browse files
+                {t("studioBrowseFiles")}
                 <input type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleUpload} />
               </label>
             </div>
@@ -3242,7 +3253,7 @@ export default function StudioPage() {
               {/* Right Side: Agent Chat */}
               <div className="space-y-4">
                 <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 flex flex-col" style={{ minHeight: "500px" }}>
-                  <h3 className="text-sm font-semibold mb-3">Agent chat</h3>
+                  <h3 className="text-sm font-semibold mb-3">{t("studioAgentChat")}</h3>
                   <div className="flex-1 space-y-2 overflow-y-auto text-sm min-h-0">
                     {muMessages.map((message, index) => (
                       <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -3261,7 +3272,7 @@ export default function StudioPage() {
                   <div className="mt-4 flex gap-2">
                     <input
                       className="flex-1 rounded-2xl border border-slate-200 bg-transparent px-4 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
-                      placeholder="Add a tweak request..."
+                      placeholder={t("studioAddTweakRequest")}
                       value={muInput}
                       onChange={(event) => setMuInput(event.target.value)}
                       onKeyDown={(event) => event.key === "Enter" && handleMuSend()}
@@ -3272,7 +3283,7 @@ export default function StudioPage() {
                       disabled={muLoading}
                       className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-slate-900"
                     >
-                      {muLoading ? "Thinking…" : "Send"}
+                      {muLoading ? "Thinking…" : t("send")}
                     </button>
                   </div>
                   <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -3890,7 +3901,7 @@ export default function StudioPage() {
         
             {/* Connect Social Media - Independent section at bottom */}
             <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <h3 className="text-lg font-semibold mb-4">Connect Social Media</h3>
+              <h3 className="text-lg font-semibold mb-4">{t("studioConnectSocialMedia")}</h3>
               <p className="text-sm text-slate-500 mb-4">Connect your accounts to upload media directly from social platforms</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="flex flex-col items-center justify-between rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
@@ -3901,7 +3912,7 @@ export default function StudioPage() {
                     <div className="text-center">
                       <p className="font-semibold text-sm">Instagram</p>
                       <p className="text-xs text-slate-500">
-                        {connectedSocials.instagram ? "Connected" : "Not connected"}
+                        {connectedSocials.instagram ? "Connected" : t("studioNotConnected")}
                       </p>
                     </div>
                   </div>
@@ -3917,7 +3928,7 @@ export default function StudioPage() {
                       onClick={() => handleSocialConnect("instagram")}
                       className="mt-3 w-full rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                     >
-                      Connect
+                      {t("studioConnect")}
                     </button>
                   )}
                 </div>
@@ -3931,7 +3942,7 @@ export default function StudioPage() {
                     <div className="text-center">
                       <p className="font-semibold text-sm">TikTok</p>
                       <p className="text-xs text-slate-500">
-                        {connectedSocials.tiktok ? "Connected" : "Not connected"}
+                        {connectedSocials.tiktok ? "Connected" : t("studioNotConnected")}
                       </p>
                     </div>
                   </div>

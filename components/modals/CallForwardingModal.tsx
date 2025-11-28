@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "@/components/ui/Modal";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface CallForwardingModalProps {
   open: boolean;
@@ -15,6 +16,7 @@ export default function CallForwardingModal({
   alohaPhoneNumber,
   onConfirmSetup,
 }: CallForwardingModalProps) {
+  const t = useTranslation();
   const handleConfirm = async () => {
     try {
       await onConfirmSetup();
@@ -26,8 +28,8 @@ export default function CallForwardingModal({
 
   return (
     <Modal
-      title="How to Set Up Call Forwarding"
-      description="Forward missed calls from your phone to Aloha"
+      title={t("callForwardingTitle")}
+      description={t("callForwardingDescription")}
       open={open}
       onClose={onClose}
       size="lg"
@@ -35,7 +37,7 @@ export default function CallForwardingModal({
       <div className="space-y-6">
         <div>
           <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-            To have Aloha handle your missed calls, enable call forwarding on your phone to this number:
+            {t("callForwardingInstructions")}
           </p>
           <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
             <p className="font-mono font-semibold text-lg text-slate-900 dark:text-slate-100">
@@ -45,35 +47,34 @@ export default function CallForwardingModal({
         </div>
 
         <div>
-          <h3 className="font-semibold mb-3">Instructions by Phone Type:</h3>
+          <h3 className="font-semibold mb-3">{t("callForwardingInstructionsByPhone")}</h3>
           <div className="space-y-4">
             <div>
-              <h4 className="font-medium text-sm mb-2">iPhone:</h4>
+              <h4 className="font-medium text-sm mb-2">{t("callForwardingIPhoneTitle")}</h4>
               <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside">
-                <li>Open Settings → Phone</li>
-                <li>Tap Call Forwarding</li>
-                <li>Toggle Call Forwarding ON</li>
-                <li>Enter {alohaPhoneNumber}</li>
-                <li>Or use: Forward When Busy / Forward When Unanswered</li>
+                <li>{t("callForwardingIPhone1")}</li>
+                <li>{t("callForwardingIPhone2")}</li>
+                <li>{t("callForwardingIPhone3")}</li>
+                <li>{t("callForwardingIPhone4").replace("{number}", alohaPhoneNumber)}</li>
+                <li>{t("callForwardingIPhone5")}</li>
               </ol>
             </div>
 
             <div>
-              <h4 className="font-medium text-sm mb-2">Android:</h4>
+              <h4 className="font-medium text-sm mb-2">{t("callForwardingAndroidTitle")}</h4>
               <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside">
-                <li>Open Phone app → Settings (three dots)</li>
-                <li>Tap Calls → Call forwarding</li>
-                <li>Select Forward when unanswered or Forward when busy</li>
-                <li>Enter {alohaPhoneNumber}</li>
-                <li>Tap Enable</li>
+                <li>{t("callForwardingAndroid1")}</li>
+                <li>{t("callForwardingAndroid2")}</li>
+                <li>{t("callForwardingAndroid3")}</li>
+                <li>{t("callForwardingAndroid4").replace("{number}", alohaPhoneNumber)}</li>
+                <li>{t("callForwardingAndroid5")}</li>
               </ol>
             </div>
 
             <div>
-              <h4 className="font-medium text-sm mb-2">Other Phones:</h4>
+              <h4 className="font-medium text-sm mb-2">{t("callForwardingOtherPhonesTitle")}</h4>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Look for &quot;Call Forwarding&quot; or &quot;Call Settings&quot; in your phone settings.
-                Enable forwarding for &quot;When Unanswered&quot; or &quot;When Busy&quot; and enter the Aloha number above.
+                {t("callForwardingOtherPhones")}
               </p>
             </div>
           </div>
@@ -81,8 +82,7 @@ export default function CallForwardingModal({
 
         <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>Note:</strong> Once you&apos;ve set up forwarding on your phone, click &quot;I&apos;ve Set This Up&quot; below.
-            Aloha will then handle calls forwarded to {alohaPhoneNumber}.
+            <strong>{t("callForwardingNote")}:</strong> {t("callForwardingNoteText").replace("{number}", alohaPhoneNumber)}
           </p>
         </div>
 
@@ -91,13 +91,13 @@ export default function CallForwardingModal({
             onClick={onClose}
             className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
-            Close
+            {t("close")}
           </button>
           <button
             onClick={handleConfirm}
             className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors"
           >
-            I&apos;ve Set This Up
+            {t("callForwardingConfirmButton")}
           </button>
         </div>
       </div>

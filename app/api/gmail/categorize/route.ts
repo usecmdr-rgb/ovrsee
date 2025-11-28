@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       emails.map(async (email) => {
         try {
           // Use OpenAI to categorize the email
-          const prompt = `You are SYNC, the CommanderX email + calendar agent. Analyze this email and categorize it.
+          const prompt = `You are SYNC, the OVRSEE email + calendar agent. Analyze this email and categorize it.
 
 Email from: ${email.sender}
 Subject: ${email.subject}

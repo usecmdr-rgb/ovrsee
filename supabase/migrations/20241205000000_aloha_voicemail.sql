@@ -96,3 +96,10 @@ CREATE POLICY "Users can delete their own phone numbers"
   FOR DELETE
   USING (auth.uid() = user_id);
 
+
+
+
+
+
+
+

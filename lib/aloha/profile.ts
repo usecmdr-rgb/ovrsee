@@ -32,29 +32,63 @@ export interface AlohaProfile {
 export async function getAlohaProfile(userId: string): Promise<AlohaProfile | null> {
   const supabase = getSupabaseServerClient();
 
-  // Try to fetch existing profile
-  const { data, error } = await supabase
+  // Fetch all profiles for the user so we can detect/clean duplicates
+  const { data: profiles, error } = await supabase
     .from("aloha_profiles")
     .select("*")
     .eq("user_id", userId)
-    .single();
+    .order("created_at", { ascending: false });
 
-  if (error && error.code !== "PGRST116") {
-    // PGRST116 = not found, which is okay
+  if (error) {
     console.error("Error fetching Aloha profile:", error);
     return null;
   }
 
-  if (data) {
-    // Validate voice_id, fallback to default if invalid
-    if (!isValidVoiceId(data.voice_id)) {
-      console.warn(`Invalid voice_id ${data.voice_id} for user ${userId}, using default`);
-      const defaultVoice = getDefaultVoice();
-      // Auto-fix invalid voice_id
-      await updateAlohaProfile(userId, { voice_id: defaultVoice.id });
-      return { ...data, voice_id: defaultVoice.id };
+  if (profiles && profiles.length > 0) {
+    const [primaryProfile, ...duplicates] = profiles;
+
+    if (duplicates.length > 0) {
+      const duplicateIds = duplicates.map((profile) => profile.id);
+      const { error: cleanupError } = await supabase
+        .from("aloha_profiles")
+        .delete()
+        .in("id", duplicateIds);
+
+      if (cleanupError) {
+        console.warn(
+          `Failed to clean up duplicate Aloha profiles for user ${userId}:`,
+          cleanupError
+        );
+      } else {
+        console.info(
+          `Cleaned up ${duplicateIds.length} duplicate Aloha profiles for user ${userId}`
+        );
+      }
     }
-    return data;
+
+    // Validate voice_id, fallback to default if invalid
+    if (!isValidVoiceId(primaryProfile.voice_id)) {
+      console.warn(
+        `Invalid voice_id ${primaryProfile.voice_id} for user ${userId}, using default`
+      );
+      const defaultVoice = getDefaultVoice();
+      const { error: voiceFixError } = await supabase
+        .from("aloha_profiles")
+        .update({ voice_id: defaultVoice.id })
+        .eq("id", primaryProfile.id);
+
+      if (voiceFixError) {
+        console.error(
+          `Failed to auto-fix invalid voice_id for user ${userId}:`,
+          voiceFixError
+        );
+        return primaryProfile;
+      }
+
+      return { ...primaryProfile, voice_id: defaultVoice.id };
+    }
+
+    return primaryProfile;
   }
 
   // No profile exists, create default one
@@ -135,7 +169,7 @@ export async function updateAlohaProfile(
   const { data, error } = await supabase
     .from("aloha_profiles")
     .update(updates)
-    .eq("user_id", userId)
+    .eq("id", existingProfile.id)
     .select()
     .single();
 

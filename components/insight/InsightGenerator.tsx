@@ -3,19 +3,24 @@
 import { useState } from "react";
 import { Sparkles, Loader2, Send, TrendingUp, AlertTriangle, Lightbulb, CheckCircle } from "lucide-react";
 import type { InsightResponse } from "@/types";
+import { useAppState } from "@/context/AppStateContext";
+import { getLanguageFromLocale } from "@/lib/localization";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export default function InsightGenerator() {
+  const { language } = useAppState();
+  const t = useTranslation();
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [insights, setInsights] = useState<InsightResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const suggestedQuestions = [
-    "What changed today?",
-    "What do I need to focus on?",
-    "What decisions are waiting for me?",
-    "What are the biggest risks right now?",
-    "What should I prioritize this week?",
+    t("insightSuggestedQuestion1"),
+    t("insightSuggestedQuestion2"),
+    t("insightSuggestedQuestion3"),
+    t("insightSuggestedQuestion4"),
+    t("insightSuggestedQuestion5"),
   ];
 
   const generateInsights = async (query?: string) => {
@@ -29,7 +34,10 @@ export default function InsightGenerator() {
       const response = await fetch("/api/insight/insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryToUse }),
+        body: JSON.stringify({ 
+          question: queryToUse,
+          language: getLanguageFromLocale(language),
+        }),
       });
 
       const result = await response.json();
@@ -38,10 +46,10 @@ export default function InsightGenerator() {
         setInsights(result.data);
         setQuestion("");
       } else {
-        setError(result.error || "Failed to generate insights");
+        setError(result.error || t("insightFailedToGenerate"));
       }
     } catch (err: any) {
-      setError(err.message || "Failed to generate insights");
+      setError(err.message || t("insightFailedToGenerate"));
     } finally {
       setLoading(false);
     }
@@ -54,8 +62,8 @@ export default function InsightGenerator() {
           <Sparkles size={20} className="text-white" />
         </div>
         <div>
-          <h3 className="text-xl font-semibold">Ask Insight Anything</h3>
-          <p className="text-sm text-slate-500">Get unified insights from all agents</p>
+          <h3 className="text-xl font-semibold">{t("insightAskInsightTitle")}</h3>
+          <p className="text-sm text-slate-500">{t("insightAskInsightDescription")}</p>
         </div>
       </div>
 
@@ -66,7 +74,7 @@ export default function InsightGenerator() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && !loading && generateInsights()}
-            placeholder="Ask a question..."
+            placeholder={t("insightAskPlaceholder")}
             className="flex-1 rounded-2xl border border-slate-200 bg-transparent px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700"
             disabled={loading}
           />
@@ -78,12 +86,12 @@ export default function InsightGenerator() {
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Thinking...
+                {t("insightThinking")}
               </>
             ) : (
               <>
                 <Send size={16} />
-                Ask
+                {t("insightAsk")}
               </>
             )}
           </button>
@@ -91,7 +99,7 @@ export default function InsightGenerator() {
       </div>
 
       <div className="mb-4">
-        <p className="text-xs text-slate-500 mb-2">Suggested questions:</p>
+        <p className="text-xs text-slate-500 mb-2">{t("insightSuggestedQuestions")}</p>
         <div className="flex flex-wrap gap-2">
           {suggestedQuestions.map((suggested, idx) => (
             <button
@@ -117,7 +125,7 @@ export default function InsightGenerator() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Lightbulb size={18} className="text-emerald-600 dark:text-emerald-400" />
-              <h4 className="font-semibold">Key Insights</h4>
+              <h4 className="font-semibold">{t("insightKeyInsights")}</h4>
             </div>
             <ul className="space-y-2">
               {insights.keyInsights.map((insight, idx) => (
@@ -133,7 +141,7 @@ export default function InsightGenerator() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <CheckCircle size={18} className="text-slate-600 dark:text-slate-400" />
-                <h4 className="font-semibold">Priority Decisions</h4>
+                <h4 className="font-semibold">{t("insightPriorityDecisions")}</h4>
               </div>
               <div className="space-y-3">
                 {insights.priorityDecisions.map((decision) => (
@@ -147,7 +155,7 @@ export default function InsightGenerator() {
                           ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
                           : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                       }`}>
-                        {decision.urgency}
+                        {decision.urgency === "high" ? t("insightHigh") : decision.urgency === "medium" ? t("insightMedium") : t("insightLow")}
                       </span>
                     </div>
                     <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">{decision.context}</p>
@@ -161,7 +169,7 @@ export default function InsightGenerator() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp size={18} className="text-slate-600 dark:text-slate-400" />
-                <h4 className="font-semibold">Trends</h4>
+                <h4 className="font-semibold">{t("insightTrends")}</h4>
               </div>
               <div className="space-y-2">
                 {insights.trends.map((trend, idx) => (
@@ -178,7 +186,7 @@ export default function InsightGenerator() {
                           ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
                           : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                       }`}>
-                        {trend.direction}
+                        {trend.direction === "up" ? t("insightUp") : trend.direction === "down" ? t("insightDown") : trend.direction}
                       </span>
                     </div>
                   </div>
@@ -191,7 +199,7 @@ export default function InsightGenerator() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle size={18} className="text-red-600 dark:text-red-400" />
-                <h4 className="font-semibold">Risks</h4>
+                <h4 className="font-semibold">{t("insightRisks")}</h4>
               </div>
               <ul className="space-y-2">
                 {insights.risks.map((risk) => (
@@ -205,11 +213,11 @@ export default function InsightGenerator() {
                           ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200"
                           : "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200"
                       }`}>
-                        {risk.severity}
+                        {risk.severity === "high" ? t("insightHigh") : risk.severity === "medium" ? t("insightMedium") : t("insightLow")}
                       </span>
                     </div>
                     {risk.deadline && (
-                      <p className="text-red-600 dark:text-red-400 text-xs mt-1">Deadline: {new Date(risk.deadline).toLocaleDateString()}</p>
+                      <p className="text-red-600 dark:text-red-400 text-xs mt-1">{t("insightDeadline")} {new Date(risk.deadline).toLocaleDateString()}</p>
                     )}
                   </li>
                 ))}
@@ -221,7 +229,7 @@ export default function InsightGenerator() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Lightbulb size={18} className="text-yellow-600 dark:text-yellow-400" />
-                <h4 className="font-semibold">Recommendations</h4>
+                <h4 className="font-semibold">{t("insightRecommendations")}</h4>
               </div>
               <div className="space-y-3">
                 {insights.recommendations.map((rec) => (
@@ -235,7 +243,7 @@ export default function InsightGenerator() {
                           ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
                           : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                       }`}>
-                        {rec.priority}
+                        {rec.priority === "high" ? t("insightHigh") : rec.priority === "medium" ? t("insightMedium") : t("insightLow")}
                       </span>
                     </div>
                     <p className="text-yellow-700 dark:text-yellow-400 text-xs mt-1">{rec.rationale}</p>
@@ -246,7 +254,7 @@ export default function InsightGenerator() {
           )}
 
           <p className="text-xs text-slate-500 pt-4 border-t border-slate-200 dark:border-slate-800">
-            Generated at {new Date(insights.generatedAt).toLocaleString()}
+            {t("insightGeneratedAt").replace("{time}", new Date(insights.generatedAt).toLocaleString())}
           </p>
         </div>
       )}
@@ -254,7 +262,7 @@ export default function InsightGenerator() {
       {!insights && !loading && !error && (
         <div className="mt-6 text-center py-8 text-slate-500">
           <Sparkles size={48} className="mx-auto mb-3 opacity-50" />
-          <p>Ask a question to get insights from all agents</p>
+          <p>{t("insightAskToGetInsights")}</p>
         </div>
       )}
     </div>

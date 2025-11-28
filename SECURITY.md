@@ -1,6 +1,6 @@
 # Security Hardening Guide
 
-This document outlines the security measures implemented in CommanderX and configuration guidance for Cloudflare.
+This document outlines the security measures implemented in OVRSEE and configuration guidance for Cloudflare.
 
 ## Current Security Implementation
 

@@ -1,22 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   getAllVoiceProfiles,
-  getVoiceProfileByKey,
+  getVoicePreviewScript,
   DEFAULT_VOICE_KEY,
+  getVoicePreviewAssetPath,
   type AlohaVoiceKey,
   type AlohaVoiceProfile,
 } from "@/lib/aloha/voice-profiles";
 import type { AlohaProfile } from "@/types/database";
 import type { UserPhoneNumber } from "@/types/database";
 import CallForwardingModal from "@/components/modals/CallForwardingModal";
-import { Search, Shuffle, X, Check, Brain, MessageSquare, Heart, Shield, Users, Clock } from "lucide-react";
+import { Search, Shuffle, X, Check, Brain, MessageSquare, Heart, Shield, Users, Clock, Play, Square } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
+
+type VoicePreviewSourcesMap = Partial<
+  Record<
+    AlohaVoiceKey,
+    {
+      objectUrl: string;
+      playbackUrl: string;
+      sampleText: string;
+      version: number;
+    }
+  >
+>;
 
 export default function AlohaSettingsPage() {
   const router = useRouter();
+  const t = useTranslation();
   const [profile, setProfile] = useState<AlohaProfile | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<UserPhoneNumber | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +43,10 @@ export default function AlohaSettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [selectedVoiceKey, setSelectedVoiceKey] = useState<AlohaVoiceKey>(DEFAULT_VOICE_KEY);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<AlohaVoiceKey | null>(null);
+  const [voicePreviewSources, setVoicePreviewSources] = useState<VoicePreviewSourcesMap>({});
+  const [previewGenerationStatus, setPreviewGenerationStatus] =
+    useState<Partial<Record<AlohaVoiceKey, "idle" | "pending">>>({});
+  const [previewToast, setPreviewToast] = useState<string | null>(null);
 
   // Phone number selection
   const [country, setCountry] = useState("US");
@@ -44,10 +63,237 @@ export default function AlohaSettingsPage() {
   const [forwardingConfirmed, setForwardingConfirmed] = useState(false);
   const [showForwardingModal, setShowForwardingModal] = useState(false);
 
-  const voiceProfiles = getAllVoiceProfiles();
+  const voiceProfiles = useMemo(() => getAllVoiceProfiles(), []);
+  const trimmedDisplayName = displayName.trim();
+  const previewName = trimmedDisplayName || "Aloha";
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePreviewSourcesRef = useRef<VoicePreviewSourcesMap>({});
+  const pendingPreviewRequestsRef =
+    useRef<Partial<Record<AlohaVoiceKey, AbortController | null>>>({});
+  const previewRegenerationTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewToastTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopCurrentAudio = () => {
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch (error) {
+        console.warn("Error stopping audio:", error);
+      }
+      audioRef.current = null;
+    }
+  };
+
+  const playAudioElement = async (audio: HTMLAudioElement, voiceKey: AlohaVoiceKey) => {
+    audioRef.current = audio;
+
+    const finalizePlayback = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      setPreviewingVoiceKey((current) => (current === voiceKey ? null : current));
+    };
+
+    audio.onended = finalizePlayback;
+    audio.onerror = (event) => {
+      console.error("Audio playback error:", event, audio.error);
+      const errorCode = audio.error?.code;
+      let message = "Failed to play voice preview.";
+      if (errorCode === 4) {
+        message = "Audio format not supported. Please try a different browser.";
+      } else if (errorCode === 2) {
+        message = "Network error loading audio. Please check your connection.";
+      } else if (errorCode === 3) {
+        message = "Audio decoding failed. Please try again.";
+      }
+      setError(message);
+      finalizePlayback();
+    };
+
+    audio.preload = "auto";
+    await audio.play();
+  };
+
+  const showPreviewToast = useCallback((message: string) => {
+    setPreviewToast(message);
+    if (previewToastTimeoutRef.current) {
+      clearTimeout(previewToastTimeoutRef.current);
+    }
+    previewToastTimeoutRef.current = setTimeout(() => {
+      setPreviewToast(null);
+    }, 4000);
+  }, []);
+
+  const base64ToBlob = useCallback((base64: string, contentType: string) => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i += 1) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: contentType });
+  }, []);
+
+  const updateVoicePreviewSource = useCallback(
+    (voiceKey: AlohaVoiceKey, sampleText: string, blob: Blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const version = Date.now();
+      const playbackUrl = `${objectUrl}?v=${version}`;
+
+      setVoicePreviewSources((prev) => {
+        const previousEntry = prev[voiceKey];
+        if (previousEntry?.objectUrl) {
+          URL.revokeObjectURL(previousEntry.objectUrl);
+        }
+        return {
+          ...prev,
+          [voiceKey]: {
+            objectUrl,
+            playbackUrl,
+            sampleText,
+            version,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const queueVoicePreviewRegeneration = useCallback(
+    (voiceKey: AlohaVoiceKey, sampleText: string) => {
+      const normalizedText = sampleText.trim();
+      if (!normalizedText) {
+        return;
+      }
+
+      const currentEntry = voicePreviewSourcesRef.current[voiceKey];
+      if (currentEntry && currentEntry.sampleText === normalizedText) {
+        return;
+      }
+
+      const previousController = pendingPreviewRequestsRef.current[voiceKey];
+      if (previousController) {
+        previousController.abort();
+      }
+
+      const controller = new AbortController();
+      pendingPreviewRequestsRef.current[voiceKey] = controller;
+
+      setPreviewGenerationStatus((prev) => ({
+        ...prev,
+        [voiceKey]: "pending",
+      }));
+
+      fetch("/api/voice-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          voiceKey,
+          sampleText: normalizedText,
+        }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok || !data?.ok || !data.audioBase64) {
+            // Handle structured error response
+            const errorMessage = data?.error?.messageKey
+              ? t(data.error.messageKey)
+              : data?.error?.defaultMessage || data?.error || "Failed to regenerate preview";
+            throw new Error(errorMessage);
+          }
+
+          const blob = base64ToBlob(
+            data.audioBase64,
+            data.contentType || "audio/mpeg"
+          );
+          updateVoicePreviewSource(voiceKey, normalizedText, blob);
+        })
+        .catch((requestError) => {
+          if (requestError?.name === "AbortError") {
+            return;
+          }
+          console.error("Voice preview regeneration error:", requestError);
+          showPreviewToast(
+            "Could not refresh the preview audio. Still using the previous clip."
+          );
+        })
+        .finally(() => {
+          const activeController = pendingPreviewRequestsRef.current[voiceKey];
+          if (activeController === controller) {
+            pendingPreviewRequestsRef.current[voiceKey] = null;
+          }
+          setPreviewGenerationStatus((prev) => ({
+            ...prev,
+            [voiceKey]: "idle",
+          }));
+        });
+    },
+    [base64ToBlob, showPreviewToast, updateVoicePreviewSource, t]
+  );
+
+  useEffect(() => {
+    voicePreviewSourcesRef.current = voicePreviewSources;
+  }, [voicePreviewSources]);
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (!voiceProfiles.length) {
+      return;
+    }
+
+    if (previewRegenerationTimeoutRef.current) {
+      clearTimeout(previewRegenerationTimeoutRef.current);
+    }
+
+    previewRegenerationTimeoutRef.current = setTimeout(() => {
+      voiceProfiles.forEach((voiceProfile) => {
+        const sampleText = getVoicePreviewScript(voiceProfile.key, previewName);
+        queueVoicePreviewRegeneration(voiceProfile.key, sampleText);
+      });
+    }, 350);
+
+    return () => {
+      if (previewRegenerationTimeoutRef.current) {
+        clearTimeout(previewRegenerationTimeoutRef.current);
+      }
+    };
+  }, [previewName, voiceProfiles, queueVoicePreviewRegeneration]);
+
+  useEffect(() => {
+    // Capture ref values at effect setup time for cleanup
+    const pendingRequests = pendingPreviewRequestsRef.current;
+    const voiceSources = voicePreviewSourcesRef.current;
+
+    return () => {
+      stopCurrentAudio();
+
+      if (previewRegenerationTimeoutRef.current) {
+        clearTimeout(previewRegenerationTimeoutRef.current);
+      }
+
+      if (previewToastTimeoutRef.current) {
+        clearTimeout(previewToastTimeoutRef.current);
+      }
+
+      Object.values(pendingRequests).forEach((controller) => {
+        controller?.abort();
+      });
+
+      Object.values(voiceSources).forEach((entry) => {
+        if (entry?.objectUrl) {
+          URL.revokeObjectURL(entry.objectUrl);
+        }
+      });
+    };
   }, []);
 
   const fetchData = async () => {
@@ -60,7 +306,8 @@ export default function AlohaSettingsPage() {
         const profileData = await profileResponse.json();
         if (profileData.ok && profileData.profile) {
           setProfile(profileData.profile);
-          setDisplayName(profileData.profile.display_name || "Aloha");
+          const fetchedDisplayName = (profileData.profile.display_name || "Aloha").trim();
+          setDisplayName(fetchedDisplayName);
           setSelectedVoiceKey(
             (profileData.profile.voice_key as AlohaVoiceKey) || DEFAULT_VOICE_KEY
           );
@@ -87,7 +334,7 @@ export default function AlohaSettingsPage() {
   };
 
   const handleSaveVoiceSettings = async () => {
-    if (!displayName.trim()) {
+    if (!trimmedDisplayName) {
       setError("Display name cannot be empty");
       return;
     }
@@ -101,7 +348,7 @@ export default function AlohaSettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          display_name: displayName.trim(),
+          display_name: trimmedDisplayName,
           voice_key: selectedVoiceKey,
         }),
       });
@@ -114,6 +361,7 @@ export default function AlohaSettingsPage() {
 
       if (data.ok && data.profile) {
         setProfile(data.profile);
+        setDisplayName(trimmedDisplayName);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       }
@@ -282,37 +530,30 @@ export default function AlohaSettingsPage() {
   };
 
   const handlePreviewVoice = async (voiceKey: AlohaVoiceKey) => {
+    if (previewingVoiceKey === voiceKey) {
+      stopCurrentAudio();
+      setPreviewingVoiceKey(null);
+      return;
+    }
+
+    stopCurrentAudio();
     setPreviewingVoiceKey(voiceKey);
+    setError(null);
+
+    const cacheEntry = voicePreviewSources[voiceKey];
+    const fallbackUrl = getVoicePreviewAssetPath(voiceKey);
+    const playbackUrl = cacheEntry
+      ? cacheEntry.playbackUrl
+      : `${fallbackUrl}?v=static`;
 
     try {
-      const response = await fetch("/api/aloha/voice-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voice_key: voiceKey }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to generate voice preview");
-      }
-
-      const data = await response.json();
-      if (data.ok && data.audioUrl) {
-        const audio = new Audio(data.audioUrl);
-        audio.play();
-
-        audio.onended = () => {
-          setPreviewingVoiceKey(null);
-        };
-
-        audio.onerror = () => {
-          setPreviewingVoiceKey(null);
-          setError("Failed to play voice preview");
-        };
-      }
-    } catch (err: any) {
-      console.error("Error previewing voice:", err);
+      await playAudioElement(new Audio(playbackUrl), voiceKey);
+    } catch (playError: any) {
+      console.error("Error playing voice preview:", playError);
       setPreviewingVoiceKey(null);
-      setError(err.message || "Failed to preview voice");
+      setError(
+        "Could not play audio. Please click the preview button again or check your browser's autoplay settings."
+      );
     }
   };
 
@@ -325,7 +566,8 @@ export default function AlohaSettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto p-6">
+    <>
+      <div className="space-y-8 max-w-4xl mx-auto p-6">
       <header>
         <button
           onClick={() => router.back()}
@@ -532,7 +774,7 @@ export default function AlohaSettingsPage() {
                       onClick={() => setShowForwardingModal(true)}
                       className="text-sm text-brand-accent hover:underline"
                     >
-                      How do I set this up?
+                      {t("howToSetUp")}
                     </button>
                   </div>
 
@@ -540,11 +782,11 @@ export default function AlohaSettingsPage() {
                     {forwardingConfirmed ? (
                       <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                         <Check size={16} />
-                        <span>Forwarding marked as set up.</span>
+                        <span>{t("forwardingMarkedSetup")}</span>
                       </div>
                     ) : (
                       <p className="text-slate-500 dark:text-slate-400">
-                        Forwarding not yet confirmed.
+                        {t("forwardingNotConfirmed")}
                       </p>
                     )}
                   </div>
@@ -556,7 +798,7 @@ export default function AlohaSettingsPage() {
                 disabled={saving || !voicemailEnabled || !externalPhoneNumber.trim()}
                 className="px-4 py-2 text-sm font-medium text-white bg-brand-accent rounded-lg hover:bg-brand-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? "Saving..." : "Save Voicemail Settings"}
+                {saving ? t("saving") : t("saveVoicemailSettings")}
               </button>
             </div>
           )}
@@ -564,34 +806,33 @@ export default function AlohaSettingsPage() {
 
         {/* Agent Name Section */}
         <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <h2 className="text-xl font-semibold mb-4">Agent Name</h2>
+          <h2 className="text-xl font-semibold mb-4">{t("agentName")}</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-            How should Aloha introduce itself during calls?
+            {t("howShouldAlohaIntroduce")}
           </p>
           <div className="space-y-2">
             <label htmlFor="display-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Display Name
+              {t("displayName")}
             </label>
             <input
               id="display-name"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Aloha"
+              placeholder={t("displayNamePlaceholder")}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
             />
             <p className="text-xs text-slate-500">
-              Example: &quot;Sarah&quot;, &quot;Alex&quot;, &quot;Reception&quot;, or &quot;Sarah from [Your Business Name]&quot;
+              {t("displayNameExample")}
             </p>
           </div>
         </section>
 
         {/* Voice Selection Section */}
         <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <h2 className="text-xl font-semibold mb-4">Voice Selection</h2>
+          <h2 className="text-xl font-semibold mb-4">{t("voiceSelection")}</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-            Choose how Aloha sounds during calls. Each voice has a distinct style and personality.
-            Aloha&apos;s behavior and personality stay the same; only the voice changes.
+            {t("chooseHowAlohaSounds")}
           </p>
           
           <div className="grid gap-4 md:grid-cols-2">
@@ -601,6 +842,8 @@ export default function AlohaSettingsPage() {
                 voiceProfile={voiceProfile}
                 isSelected={selectedVoiceKey === voiceProfile.key}
                 isPreviewing={previewingVoiceKey === voiceProfile.key}
+                isRefreshing={previewGenerationStatus[voiceProfile.key] === "pending"}
+                previewScript={getVoicePreviewScript(voiceProfile.key, previewName)}
                 onSelect={() => setSelectedVoiceKey(voiceProfile.key)}
                 onPreview={() => handlePreviewVoice(voiceProfile.key)}
               />
@@ -615,36 +858,36 @@ export default function AlohaSettingsPage() {
               <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Conversation Intelligence</h2>
-              <p className="text-xs text-slate-500">Automatic intent classification & understanding</p>
+              <h2 className="text-xl font-semibold">{t("conversationIntelligence")}</h2>
+              <p className="text-xs text-slate-500">{t("automaticIntentClassification")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Question Types</p>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">{t("questionTypes")}</p>
               <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p>Pricing, Availability, Services, Appointments, Hours, Location, Contact, Policy</p>
               </div>
             </div>
             <div>
-              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Statement Types</p>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">{t("statementTypes")}</p>
               <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p>Complaint, Praise, Confusion, Correction, Information Provided</p>
               </div>
             </div>
             <div>
-              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Emotional States</p>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">{t("emotionalStates")}</p>
               <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p>Happy, Neutral, Upset, Angry, Stressed, Frustrated, Confused</p>
               </div>
             </div>
             <div>
-              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Call Flow Intents</p>
+              <p className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">{t("callFlowIntents")}</p>
               <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p>Wants Callback, Wants Email, Wants Appointment, Wants Reschedule</p>
               </div>
@@ -659,35 +902,35 @@ export default function AlohaSettingsPage() {
               <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Natural Voice Dynamics</h2>
-              <p className="text-xs text-slate-500">Human-like speech patterns & flow</p>
+              <h2 className="text-xl font-semibold">{t("naturalVoiceDynamics")}</h2>
+              <p className="text-xs text-slate-500">{t("humanLikeSpeech")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Micro pauses between clauses for natural flow
+              {t("microPauses")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Context-aware natural disfluencies (sparingly)
+              {t("contextAwareDisfluencies")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Softening phrases for gentle communication
+              {t("softeningPhrases")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Emotion-aware tone adjustments
+              {t("emotionAwareTone")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              Varies sentence lengths for natural rhythm
+              {t("variesSentenceLengths")}
             </li>
           </ul>
         </section>
@@ -699,31 +942,31 @@ export default function AlohaSettingsPage() {
               <Heart className="w-5 h-5 text-red-600 dark:text-red-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Emotional Intelligence</h2>
-              <p className="text-xs text-slate-500">Empathetic response shaping based on caller emotions</p>
+              <h2 className="text-xl font-semibold">{t("emotionalIntelligence")}</h2>
+              <p className="text-xs text-slate-500">{t("empatheticResponse")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <div className="grid gap-4 md:grid-cols-2">
             <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Upset Callers</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Gentle tone, acknowledgment, softer language</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("upsetCallers")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("upsetCallersDesc")}</p>
             </div>
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Angry Callers</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">De-escalation, neutral clarity, acknowledges frustration</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("angryCallers")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("angryCallersDesc")}</p>
             </div>
             <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Stressed Callers</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Slow pace, reassurance, &quot;No worries&quot; phrases</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("stressedCallers")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("stressedCallersDesc")}</p>
             </div>
             <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Confused Callers</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Explicit guidance, broken-down instructions, clarifying phrases</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("confusedCallers")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("confusedCallersDesc")}</p>
             </div>
           </div>
         </section>
@@ -735,31 +978,31 @@ export default function AlohaSettingsPage() {
               <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Communication Resilience</h2>
-              <p className="text-xs text-slate-500">Handles connection issues & silence gracefully</p>
+              <h2 className="text-xl font-semibold">{t("communicationResilience")}</h2>
+              <p className="text-xs text-slate-500">{t("handlesConnectionIssues")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <div className="space-y-3">
             <div>
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Bad Connection Detection</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Automatically detects low STT confidence and inaudible segments, prompts for repetition</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("badConnectionDetection")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("badConnectionDesc")}</p>
             </div>
             <div>
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Silence Handling</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("silenceHandling")}</p>
               <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1 ml-4">
-                <p>• 2-3 seconds: &quot;Are you still there?&quot;</p>
-                <p>• 6-7 seconds: &quot;It might be a quiet moment, no rush.&quot;</p>
-                <p>• 10+ seconds: Graceful call ending</p>
+                <p>{t("silence2to3")}</p>
+                <p>{t("silence6to7")}</p>
+                <p>{t("silence10Plus")}</p>
               </div>
             </div>
             <div>
-              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">Talkative Caller Management</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">Politely redirects long responses back to campaign goal</p>
+              <p className="text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">{t("talkativeCallerManagement")}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{t("talkativeCallerDesc")}</p>
             </div>
           </div>
         </section>
@@ -771,31 +1014,31 @@ export default function AlohaSettingsPage() {
               <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Contact Memory</h2>
-              <p className="text-xs text-slate-500">Lightweight per-phone-number memory for personalized conversations</p>
+              <h2 className="text-xl font-semibold">{t("contactMemory")}</h2>
+              <p className="text-xs text-slate-500">{t("lightweightMemory")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300 mb-4">
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-              Remembers caller name and basic preferences per phone number
+              {t("remembersCallerName")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-              Enforces do-not-call flags automatically
+              {t("enforcesDoNotCall")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-              Adjusts greetings based on previous interactions
+              {t("adjustsGreetings")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-              Tracks call frequency and outcomes
+              {t("tracksCallFrequency")}
             </li>
           </ul>
           
@@ -803,7 +1046,7 @@ export default function AlohaSettingsPage() {
             href="/aloha/contacts"
             className="inline-block text-sm text-brand-accent hover:underline font-medium"
           >
-            Manage Contacts →
+            {t("manageContacts")}
           </Link>
         </section>
 
@@ -814,31 +1057,31 @@ export default function AlohaSettingsPage() {
               <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">End-of-Call Intelligence</h2>
-              <p className="text-xs text-slate-500">Graceful call endings with context awareness</p>
+              <h2 className="text-xl font-semibold">{t("endOfCallIntelligence")}</h2>
+              <p className="text-xs text-slate-500">{t("gracefulCallEndings")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm font-medium text-green-600 dark:text-green-400">Always Enabled</span>
+            <span className="text-sm font-medium text-green-600 dark:text-green-400">{t("alwaysEnabled")}</span>
           </div>
           
           <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-              Detects exit intent (explicit and implicit)
+              {t("detectsExitIntent")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-              Checks for additional needs before closing
+              {t("checksAdditionalNeeds")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-              Context-aware closing messages (standard, upset, bad connection)
+              {t("contextAwareClosing")}
             </li>
             <li className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-              Respectful endings that honor caller&apos;s time
+              {t("respectfulEndings")}
             </li>
           </ul>
         </section>
@@ -849,14 +1092,14 @@ export default function AlohaSettingsPage() {
             onClick={() => router.back()}
             className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
-            Cancel
+            {t("cancel")}
           </button>
           <button
             onClick={handleSaveVoiceSettings}
-            disabled={saving || !displayName.trim() || !selectedVoiceKey}
+            disabled={saving || !trimmedDisplayName || !selectedVoiceKey}
             className="px-6 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? t("saving") : t("saveSettings")}
           </button>
         </div>
       </div>
@@ -871,6 +1114,13 @@ export default function AlohaSettingsPage() {
         />
       )}
     </div>
+
+      {previewToast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
+          {previewToast}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -878,6 +1128,8 @@ interface VoiceProfileCardProps {
   voiceProfile: AlohaVoiceProfile;
   isSelected: boolean;
   isPreviewing: boolean;
+  isRefreshing: boolean;
+  previewScript: string;
   onSelect: () => void;
   onPreview: () => void;
 }
@@ -886,22 +1138,25 @@ function VoiceProfileCard({
   voiceProfile,
   isSelected,
   isPreviewing,
+  isRefreshing,
+  previewScript,
   onSelect,
   onPreview,
 }: VoiceProfileCardProps) {
+  const t = useTranslation();
   return (
     <div
-      className={`rounded-xl border-2 p-4 cursor-pointer transition-all ${
+      className={`rounded-xl border-2 p-4 cursor-pointer transition-all flex flex-col h-full min-h-[140px] ${
         isSelected
           ? "border-brand-accent bg-brand-accent/5 dark:bg-brand-accent/10"
           : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
       }`}
       onClick={onSelect}
     >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex-1">
-          <h3 className="font-semibold text-lg">{voiceProfile.label}</h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+      <div className="flex items-start justify-between mb-2 flex-shrink-0">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-lg leading-tight">{voiceProfile.label}</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 min-h-[40px] line-clamp-2">
             {voiceProfile.description}
           </p>
         </div>
@@ -911,21 +1166,38 @@ function VoiceProfileCard({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 mt-3">
-        <span className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-          {voiceProfile.tonePreset}
-        </span>
+      <div className="flex items-center gap-2 mt-auto pt-3 flex-shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onPreview();
           }}
-          disabled={isPreviewing}
-          className="text-xs px-3 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors min-w-[80px] h-[28px]"
         >
-          {isPreviewing ? "Playing..." : "Preview"}
+          {isPreviewing ? (
+            <>
+              <Square className="w-3 h-3 fill-current" />
+              {t("stop")}
+            </>
+          ) : (
+            <>
+              <Play className="w-3 h-3 fill-current" />
+              {t("preview")}
+            </>
+          )}
         </button>
+        {isRefreshing && (
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500">
+            Updating…
+          </span>
+        )}
+        <span className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+          {voiceProfile.tonePreset}
+        </span>
       </div>
+      <p className="mt-3 text-xs italic text-slate-500 dark:text-slate-400">
+        &ldquo;{previewScript}&rdquo;
+      </p>
     </div>
   );
 }

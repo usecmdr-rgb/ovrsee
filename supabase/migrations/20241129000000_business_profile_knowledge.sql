@@ -202,3 +202,10 @@ COMMENT ON COLUMN business_profiles.image_watermark_position IS 'Position for im
 COMMENT ON COLUMN business_knowledge_chunks.source IS 'Source of knowledge: form (from business info form), website (crawled), or manual (admin-added)';
 COMMENT ON COLUMN business_knowledge_chunks.embedding IS 'Vector embedding for semantic search (optional, requires pgvector extension)';
 
+
+
+
+
+
+
+

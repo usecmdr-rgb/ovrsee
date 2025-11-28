@@ -1,6 +1,6 @@
 # Setting Up Subscription for Test User
 
-To give `test.basic@commanderx.test` basic tier access, follow these steps:
+To give `test.basic@ovrsee.test` basic tier access, follow these steps:
 
 ## Step 1: Run the Migration SQL
 
@@ -43,13 +43,13 @@ After running the migration, call the API endpoint:
 ```bash
 curl -X POST http://localhost:3001/api/test/set-subscription \
   -H "Content-Type: application/json" \
-  -d '{"email":"test.basic@commanderx.test","tier":"basic","status":"active"}'
+  -d '{"email":"test.basic@ovrsee.test","tier":"basic","status":"active"}'
 ```
 
 Or use the script:
 
 ```bash
-node scripts/update-user-subscription.js test.basic@commanderx.test basic active
+node scripts/update-user-subscription.js test.basic@ovrsee.test basic active
 ```
 
 ## Alternative: Using Supabase Dashboard
@@ -65,14 +65,14 @@ SET
   subscription_tier = 'basic',
   subscription_status = 'active'
 WHERE id = (
-  SELECT id FROM auth.users WHERE email = 'test.basic@commanderx.test'
+  SELECT id FROM auth.users WHERE email = 'test.basic@ovrsee.test'
 );
 ```
 
 ## Verify
 
 After setting up, the user can:
-1. Log in with `test.basic@commanderx.test`
+1. Log in with `test.basic@ovrsee.test`
 2. Navigate to `/account/subscription` to see their subscription details
 3. View their current plan, payment methods, and available tiers
 

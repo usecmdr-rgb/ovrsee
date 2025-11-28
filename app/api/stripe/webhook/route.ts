@@ -5,10 +5,6 @@ import Stripe from "stripe";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-if (!webhookSecret) {
-  throw new Error("STRIPE_WEBHOOK_SECRET environment variable is required");
-}
-
 /**
  * POST /api/stripe/webhook
  * 
@@ -57,6 +53,26 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServerClient();
 
   try {
+    // Idempotency: ensure each Stripe event is processed at most once
+    // We insert the event ID into a dedicated table with a UNIQUE constraint.
+    // If the insert fails with a unique violation, we know we've already processed it.
+    const { error: insertError } = await supabase
+      .from("stripe_webhook_events")
+      .insert({ id: event.id });
+
+    if (insertError) {
+      // 23505 = unique_violation in Postgres
+      if ((insertError as any).code === "23505") {
+        console.warn("Duplicate Stripe webhook event, skipping:", event.id);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      console.error("Error recording webhook event:", insertError);
+      return NextResponse.json(
+        { error: "Failed to record webhook event" },
+        { status: 500 }
+      );
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -126,14 +142,35 @@ export async function POST(request: NextRequest) {
 
         // Also update profiles table for backward compatibility
         // The trigger should handle this, but we do it explicitly for safety
+        // IMPORTANT: Set trial_started_at when subscription starts (for metrics filtering)
+        // IMPORTANT: Set has_used_trial = true to ensure user never goes back to preview mode
+        const profileUpdate: any = {
+          stripe_subscription_id: subscriptionId,
+          stripe_customer_id: customerId,
+          subscription_tier: subscriptionData.tier,
+          subscription_status: subscriptionData.status,
+          has_used_trial: true, // Once they subscribe, they've "used" a trial (prevents preview mode)
+        };
+        
+        // Set trial_started_at if this is a new activation (trial or subscription start)
+        // This is critical for metrics filtering - only count events after activation
+        if (subscriptionData.trial_started_at) {
+          profileUpdate.trial_started_at = subscriptionData.trial_started_at;
+        } else if (subscription.current_period_start) {
+          // If this is a direct subscription (no trial), use current_period_start as activation
+          profileUpdate.trial_started_at = new Date(subscription.current_period_start * 1000).toISOString();
+        } else {
+          // Fallback: use current timestamp as activation point
+          profileUpdate.trial_started_at = new Date().toISOString();
+        }
+        
+        if (subscriptionData.trial_ends_at) {
+          profileUpdate.trial_ends_at = subscriptionData.trial_ends_at;
+        }
+        
         const { error: profileError } = await supabase
           .from("profiles")
-          .update({
-            stripe_subscription_id: subscriptionId,
-            stripe_customer_id: customerId,
-            subscription_tier: subscriptionData.tier,
-            subscription_status: subscriptionData.status,
-          })
+          .update(profileUpdate)
           .eq("id", userId);
 
         if (profileError) {

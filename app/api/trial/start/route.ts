@@ -138,7 +138,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Calculate trial end date (3 days from now)
+    // Calculate trial start and end dates
+    const trialStartedAt = subscription.trial_start
+      ? new Date(subscription.trial_start * 1000).toISOString()
+      : new Date().toISOString();
     const trialEndsAt = subscription.trial_end
       ? new Date(subscription.trial_end * 1000).toISOString()
       : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
@@ -154,12 +157,32 @@ export async function POST(request: NextRequest) {
     await markTrialAsUsed(userId, userEmail);
 
     // Store subscription info in Supabase
+    // IMPORTANT: Set trial_started_at to mark when user activated (for metrics filtering)
     await supabase.from("profiles").update({
       subscription_tier: tier,
       subscription_status: "trialing",
+      trial_started_at: trialStartedAt,
       trial_ends_at: trialEndsAt,
       stripe_subscription_id: subscription.id,
     }).eq("id", userId);
+    
+    // Also create/update subscription record in subscriptions table
+    await supabase.from("subscriptions").upsert({
+      user_id: userId,
+      tier: tier,
+      status: "trialing",
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscription.id,
+      trial_started_at: trialStartedAt,
+      trial_ends_at: trialEndsAt,
+      cancel_at_period_end: false,
+      current_period_start: subscription.current_period_start
+        ? new Date(subscription.current_period_start * 1000).toISOString()
+        : null,
+      current_period_end: subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null,
+    });
 
     return NextResponse.json({
       success: true,

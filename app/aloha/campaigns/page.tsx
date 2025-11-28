@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface Campaign {
   id: string;
@@ -38,6 +39,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslation();
 
   useEffect(() => {
     fetchCampaigns();
@@ -127,7 +129,7 @@ export default function CampaignsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-slate-500">Loading campaigns...</p>
+        <p className="text-slate-500">{t("loadingCampaigns")}</p>
       </div>
     );
   }
@@ -136,14 +138,14 @@ export default function CampaignsPage() {
     <div className="space-y-8">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-sm uppercase tracking-widest text-slate-500">Aloha Agent</p>
-          <h1 className="text-3xl font-semibold">Call Campaigns</h1>
+          <p className="text-sm uppercase tracking-widest text-slate-500">{t("alohaAgent")}</p>
+          <h1 className="text-3xl font-semibold">{t("callCampaigns")}</h1>
         </div>
         <Link
           href="/aloha/campaigns/new"
           className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors"
         >
-          Create Campaign
+          {t("createCampaign")}
         </Link>
       </header>
 
@@ -155,12 +157,12 @@ export default function CampaignsPage() {
 
       {campaigns.length === 0 ? (
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-12 text-center dark:border-slate-800 dark:bg-slate-900/40">
-          <p className="text-slate-500 mb-4">No campaigns yet</p>
+          <p className="text-slate-500 mb-4">{t("noCampaignsYet")}</p>
           <Link
             href="/aloha/campaigns/new"
             className="inline-block px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors"
           >
-            Create Your First Campaign
+            {t("createYourFirstCampaign")}
           </Link>
         </div>
       ) : (
@@ -213,7 +215,7 @@ export default function CampaignsPage() {
 
               <div className="mb-4">
                 <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-slate-600 dark:text-slate-300">Progress</span>
+                  <span className="text-slate-600 dark:text-slate-300">{t("progress")}</span>
                   <span className="font-semibold">
                     {campaign.progress.completed} / {campaign.progress.total} (
                     {campaign.progress.percentage}%)
@@ -226,10 +228,10 @@ export default function CampaignsPage() {
                   />
                 </div>
                 <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                  <span>Pending: {campaign.progress.pending}</span>
-                  <span>Completed: {campaign.progress.completed}</span>
+                  <span>{t("pending")}: {campaign.progress.pending}</span>
+                  <span>{t("completed")}: {campaign.progress.completed}</span>
                   {campaign.progress.failed > 0 && (
-                    <span>Failed: {campaign.progress.failed}</span>
+                    <span>{t("failed")}: {campaign.progress.failed}</span>
                   )}
                 </div>
               </div>
@@ -240,7 +242,7 @@ export default function CampaignsPage() {
                     onClick={() => handleAction(campaign.id, "start")}
                     className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
-                    Start
+                    {t("start")}
                   </button>
                 )}
                 {campaign.status === "running" && (
@@ -248,7 +250,7 @@ export default function CampaignsPage() {
                     onClick={() => handleAction(campaign.id, "pause")}
                     className="px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                   >
-                    Pause
+                    {t("pause")}
                   </button>
                 )}
                 {campaign.status === "paused" && (
@@ -256,26 +258,26 @@ export default function CampaignsPage() {
                     onClick={() => handleAction(campaign.id, "resume")}
                     className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
-                    Resume
+                    {t("resume")}
                   </button>
                 )}
                 {campaign.status !== "completed" && campaign.status !== "canceled" && (
                   <button
                     onClick={() => {
-                      if (confirm("Are you sure you want to cancel this campaign?")) {
+                      if (confirm(t("areYouSureCancelCampaign"))) {
                         handleAction(campaign.id, "cancel");
                       }
                     }}
                     className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                   >
-                    Cancel
+                    {t("cancel")}
                   </button>
                 )}
                 <Link
                   href={`/aloha/campaigns/${campaign.id}` as any}
                   className="px-3 py-1.5 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-colors"
                 >
-                  View Details
+                  {t("viewDetails")}
                 </Link>
               </div>
             </div>

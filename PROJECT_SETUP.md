@@ -3,12 +3,12 @@
 ## ✅ Project Status
 
 ### Git Configuration
-- **Repository**: `https://github.com/usecmdr-rgb/commanderx-site.git`
+- **Repository**: `https://github.com/usecmdr-rgb/ovrsee-site.git`
 - **Branch**: `main`
 - **Status**: Connected and ready
 
 ### Package Configuration
-- **Name**: `commanderx-site`
+- **Name**: `ovrsee-site`
 - **Version**: `1.0.0`
 - **Next.js**: `14.1.0`
 - **React**: `18.2.0`
@@ -75,7 +75,7 @@ COMMANDX/
 
 Your project is already connected to:
 - **GitHub User**: `usecmdr-rgb`
-- **Repository**: `commanderx-site`
+- **Repository**: `ovrsee-site`
 - **Remote**: `origin`
 
 To verify:

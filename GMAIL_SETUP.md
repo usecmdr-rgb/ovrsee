@@ -20,7 +20,7 @@ Before setting up, you can check your current configuration by visiting:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Click on the project dropdown at the top
 3. Click "New Project"
-4. Enter a project name (e.g., "CommanderX Gmail Integration")
+4. Enter a project name (e.g., "OVRSEE Gmail Integration")
 5. Click "Create"
 
 ### 2. Enable Gmail API
@@ -36,7 +36,7 @@ Before setting up, you can check your current configuration by visiting:
 2. Click **+ CREATE CREDENTIALS** > **OAuth client ID**
 3. If prompted, configure the OAuth consent screen:
    - User Type: **External** (for testing) or **Internal** (for Google Workspace)
-   - App name: "CommanderX"
+   - App name: "OVRSEE"
    - User support email: Your email
    - Developer contact: Your email
    - Click **Save and Continue**
@@ -50,7 +50,7 @@ Before setting up, you can check your current configuration by visiting:
 
 4. Create OAuth Client ID:
    - Application type: **Web application**
-   - Name: "CommanderX Gmail Client"
+   - Name: "OVRSEE Gmail Client"
    - Authorized redirect URIs: Click **+ ADD URI** and add:
      - For local development: `http://localhost:3000/api/gmail/callback`
      - For production: `https://yourdomain.com/api/gmail/callback`

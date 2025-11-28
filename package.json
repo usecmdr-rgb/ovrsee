@@ -1,5 +1,5 @@
 {
-  "name": "commanderx-site",
+  "name": "ovrsee-site",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start",
     "start:3001": "next start -p 3001",
-    "lint": "next lint"
+    "lint": "next lint",
+    "voices:previews": "node generateVoicePreviews.js",
+    "generate:assets": "node scripts/generate-favicons.js && node scripts/generate-og-image.js",
+    "generate:assets:shell": "./scripts/generate-assets.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

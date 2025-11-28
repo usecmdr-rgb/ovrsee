@@ -3,6 +3,7 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslation } from "@/hooks/useTranslation";
 import { getAllPurposes, type CampaignPurpose, type ScriptStyle } from "@/lib/aloha/campaign-purposes";
 
 type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -30,6 +31,7 @@ const COMMON_TIMEZONES = [
 
 export default function NewCampaignPage() {
   const router = useRouter();
+  const t = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -481,19 +483,19 @@ export default function NewCampaignPage() {
             className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:border-slate-700 dark:bg-slate-800"
             placeholder={
               purpose === "urgent_notifications"
-                ? "Example: keep the call under 1 minute and be extra polite if they're upset."
+                ? t("campaignInstructionsPlaceholderUrgent")
                 : purpose === "feedback_satisfaction"
-                ? "Example: ask for feedback about their last haircut and offer a 10% discount if they were unhappy."
+                ? t("campaignInstructionsPlaceholderFeedback")
                 : purpose === "lead_generation_sales"
-                ? "Example: if they say they're busy, ask for a better time to call back."
-                : "Example: keep the call under 1 minute and be extra polite if they're upset."
+                ? t("campaignInstructionsPlaceholderLead")
+                : t("campaignInstructionsPlaceholderUrgent")
             }
           />
           <p className="text-xs text-slate-500 mt-2">
-            You can give Aloha extra guidance in natural language. For example: &quot;keep the call very short,&quot; &quot;always offer to reschedule,&quot; or &quot;be extra apologetic about cancellations.&quot; Aloha will follow your instructions on top of its built-in script for this campaign.
+            {t("campaignInstructionsDescription")}
           </p>
           <p className="text-xs text-slate-400 mt-1 italic">
-            Note: The base script is automatically generated from your campaign purpose and message. You can&apos;t edit it directly, but you can influence Aloha&apos;s behavior with these additional instructions.
+            {t("campaignInstructionsNote")}
           </p>
         </div>
 

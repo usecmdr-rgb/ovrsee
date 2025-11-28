@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { AlertCategory, AgentKey, BusinessInfo } from "@/types";
 import { defaultAlertCategories, defaultBusinessInfo } from "@/lib/data";
+import { supabaseBrowserClient } from "@/lib/supabaseClient";
 
 type ThemeMode = "light" | "dark";
 type AuthMode = "login" | "signup";
@@ -61,37 +62,57 @@ export const AppStateProvider = ({ children }: { children: React.ReactNode }) =>
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
-    try {
-      // Load authentication state from localStorage
-      const storedAuth = window.localStorage.getItem("cx-authenticated");
-      if (storedAuth === "true") {
-        setIsAuthenticated(true);
-      }
 
-      const storedTheme = window.localStorage.getItem("cx-theme") as ThemeMode | null;
-      if (storedTheme) {
-        setThemeState(storedTheme);
-      } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        setThemeState("dark");
-      }
+    // Keep track of the Supabase auth subscription so we can clean it up on unmount
+    let authSubscription: { unsubscribe: () => void } | null = null;
 
-      const storedLanguage = window.localStorage.getItem("cx-language") as LanguageCode | null;
-      if (storedLanguage) {
-        setLanguageState(storedLanguage);
-      } else {
-        // Try to detect browser language
-        const browserLang = navigator.language.split("-")[0] as LanguageCode;
-        const supportedLanguages: LanguageCode[] = ["en", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko"];
-        if (supportedLanguages.includes(browserLang)) {
-          setLanguageState(browserLang);
+    (async () => {
+      try {
+        // Initialize authentication state from Supabase session
+        const {
+          data: { session },
+        } = await supabaseBrowserClient.auth.getSession();
+        setIsAuthenticated(!!session);
+
+        const storedTheme = window.localStorage.getItem("cx-theme") as ThemeMode | null;
+        if (storedTheme) {
+          setThemeState(storedTheme);
+        } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          setThemeState("dark");
         }
+
+        const storedLanguage = window.localStorage.getItem("cx-language") as LanguageCode | null;
+        if (storedLanguage) {
+          setLanguageState(storedLanguage);
+        } else {
+          // Try to detect browser language
+          const browserLang = navigator.language.split("-")[0] as LanguageCode;
+          const supportedLanguages: LanguageCode[] = ["en", "es", "fr", "de", "it", "pt", "nl", "ja", "zh", "ko"];
+          if (supportedLanguages.includes(browserLang)) {
+            setLanguageState(browserLang);
+          }
+        }
+
+        // Subscribe to auth state changes so isAuthenticated stays in sync
+        const {
+          data: { subscription },
+        } = supabaseBrowserClient.auth.onAuthStateChange((_event, sessionUpdate) => {
+          setIsAuthenticated(!!sessionUpdate);
+        });
+        authSubscription = subscription;
+      } catch (error) {
+        console.error("Error loading app state:", error);
+      } finally {
+        setIsMounted(true);
       }
-    } catch (error) {
-      console.error("Error loading app state:", error);
-    } finally {
-      setIsMounted(true);
-    }
+    })();
+
+    return () => {
+      // Clean up Supabase auth listener on unmount
+      if (authSubscription && typeof authSubscription.unsubscribe === "function") {
+        authSubscription.unsubscribe();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -119,19 +140,9 @@ export const AppStateProvider = ({ children }: { children: React.ReactNode }) =>
   const setLanguage = (lang: LanguageCode) => setLanguageState(lang);
 
   const login = () => {
-    setIsAuthenticated(true);
     const wasSignup = authModalMode === "signup";
     setAuthModalMode(null);
-    
-    // Persist authentication state in localStorage
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem("cx-authenticated", "true");
-      } catch (error) {
-        console.error("Error saving authentication state:", error);
-      }
-    }
-    
+
     // Only show business modal once during signup if it hasn't been shown before
     if (wasSignup && typeof window !== "undefined") {
       const hasSeenBusinessModal = window.localStorage.getItem("cx-business-modal-shown");
@@ -143,15 +154,10 @@ export const AppStateProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const logout = () => {
-    setIsAuthenticated(false);
-    // Remove authentication state from localStorage
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem("cx-authenticated");
-      } catch (error) {
-        console.error("Error removing authentication state:", error);
-      }
-    }
+    // Supabase sign-out will trigger auth listener to update isAuthenticated
+    supabaseBrowserClient.auth.signOut().catch((error) => {
+      console.error("Error signing out:", error);
+    });
   };
 
   const openAuthModal = (mode: AuthMode) => {

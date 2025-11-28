@@ -3,7 +3,8 @@ const nextConfig = {
   typedRoutes: true,
   async redirects() {
     return [
-      // Redirect old agent route names to new names
+      // Redirect old agent route names to new canonical routes (top-level)
+      // Legacy routes: alpha, beta, mu, xi → New routes: aloha, insight, studio, sync
       {
         source: "/alpha",
         destination: "/aloha",
@@ -11,27 +12,7 @@ const nextConfig = {
       },
       {
         source: "/app/alpha",
-        destination: "/app/aloha",
-        permanent: true,
-      },
-      {
-        source: "/xi",
-        destination: "/sync",
-        permanent: true,
-      },
-      {
-        source: "/app/xi",
-        destination: "/app/sync",
-        permanent: true,
-      },
-      {
-        source: "/mu",
-        destination: "/studio",
-        permanent: true,
-      },
-      {
-        source: "/app/mu",
-        destination: "/app/studio",
+        destination: "/aloha",
         permanent: true,
       },
       {
@@ -41,7 +22,54 @@ const nextConfig = {
       },
       {
         source: "/app/beta",
-        destination: "/app/insight",
+        destination: "/insight",
+        permanent: true,
+      },
+      {
+        source: "/mu",
+        destination: "/studio",
+        permanent: true,
+      },
+      {
+        source: "/app/mu",
+        destination: "/studio",
+        permanent: true,
+      },
+      {
+        source: "/xi",
+        destination: "/sync",
+        permanent: true,
+      },
+      {
+        source: "/app/xi",
+        destination: "/sync",
+        permanent: true,
+      },
+      // Redirect duplicate /app/* agent routes to top-level canonical routes
+      {
+        source: "/app/aloha",
+        destination: "/aloha",
+        permanent: true,
+      },
+      {
+        source: "/app/insight",
+        destination: "/insight",
+        permanent: true,
+      },
+      {
+        source: "/app/studio",
+        destination: "/studio",
+        permanent: true,
+      },
+      {
+        source: "/app/sync",
+        destination: "/sync",
+        permanent: true,
+      },
+      // Redirect dashboard alias to canonical /app route
+      {
+        source: "/dashboard",
+        destination: "/app",
         permanent: true,
       },
     ];

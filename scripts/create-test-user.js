@@ -5,15 +5,21 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://nupxbdbychuqokubresi.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_SR5PYW41Fwh9aYqhrPXVpA_0xrhgcA9';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error(
+    'Missing required Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for scripts/create-test-user.js'
+  );
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false },
 });
 
 async function createTestUser() {
-  const email = 'test.basic@commanderx.test';
+  const email = 'test.basic@ovrsee.test';
   const password = 'TestBasic123!';
 
   try {

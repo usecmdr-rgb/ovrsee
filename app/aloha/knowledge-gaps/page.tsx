@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface KnowledgeGap {
   id: string;
@@ -18,6 +19,7 @@ interface KnowledgeGap {
 }
 
 export default function KnowledgeGapsPage() {
+  const t = useTranslation();
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +30,7 @@ export default function KnowledgeGapsPage() {
   const [addToKnowledgeBase, setAddToKnowledgeBase] = useState(false);
   const [knowledgeChunkContent, setKnowledgeChunkContent] = useState("");
 
-  useEffect(() => {
-    fetchGaps();
-  }, [filter]);
-
-  const fetchGaps = async () => {
+  const fetchGaps = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -50,11 +48,15 @@ export default function KnowledgeGapsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchGaps();
+  }, [fetchGaps]);
 
   const handleResolve = async () => {
     if (!selectedGap || !resolutionNotes.trim()) {
-      alert("Please provide resolution notes");
+      alert(t("pleaseProvideResolutionNotes"));
       return;
     }
 
@@ -118,7 +120,7 @@ export default function KnowledgeGapsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-slate-500">Loading knowledge gaps...</p>
+        <p className="text-slate-500">{t("loadingKnowledgeGaps")}</p>
       </div>
     );
   }
@@ -126,10 +128,10 @@ export default function KnowledgeGapsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <p className="text-sm uppercase tracking-widest text-slate-500">Aloha Agent</p>
-        <h1 className="text-3xl font-semibold">Knowledge Gaps</h1>
+        <p className="text-sm uppercase tracking-widest text-slate-500">{t("alohaAgent")}</p>
+        <h1 className="text-3xl font-semibold">{t("knowledgeGaps")}</h1>
         <p className="text-slate-600 dark:text-slate-300 mt-2">
-          When agents encounter missing information, they log it here instead of inventing answers.
+          {t("knowledgeGapsDescription")}
         </p>
       </header>
 
@@ -149,7 +151,7 @@ export default function KnowledgeGapsPage() {
               : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
           }`}
         >
-          Open ({gaps.filter((g) => g.status === "open").length})
+          {t("open")} ({gaps.filter((g) => g.status === "open").length})
         </button>
         <button
           onClick={() => setFilter("resolved")}
@@ -159,7 +161,7 @@ export default function KnowledgeGapsPage() {
               : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
           }`}
         >
-          Resolved ({gaps.filter((g) => g.status === "resolved").length})
+          {t("resolved")} ({gaps.filter((g) => g.status === "resolved").length})
         </button>
         <button
           onClick={() => setFilter("all")}
@@ -169,7 +171,7 @@ export default function KnowledgeGapsPage() {
               : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
           }`}
         >
-          All
+          {t("all")}
         </button>
       </div>
 
@@ -177,8 +179,8 @@ export default function KnowledgeGapsPage() {
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-12 text-center dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-slate-500">
             {filter === "open"
-              ? "No open knowledge gaps. Great job keeping your business information up to date!"
-              : "No knowledge gaps found."}
+              ? t("noOpenGaps")
+              : t("noKnowledgeGapsFound")}
           </p>
         </div>
       ) : (
@@ -209,23 +211,23 @@ export default function KnowledgeGapsPage() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">{gap.question}</h3>
                   <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
-                    <strong>Requested Info:</strong> {gap.requested_info}
+                    <strong>{t("requestedInfo")}</strong> {gap.requested_info}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {formatDate(gap.created_at)} • Source: {gap.source}
-                    {gap.context_id && ` • Context ID: ${gap.context_id}`}
+                    {formatDate(gap.created_at)} • {t("source")}: {gap.source}
+                    {gap.context_id && ` • ${t("contextId")}: ${gap.context_id}`}
                   </p>
                   {gap.resolution_notes && (
                     <div className="mt-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
                       <p className="text-sm font-semibold text-green-800 dark:text-green-200 mb-1">
-                        Resolution:
+                        {t("resolution")}
                       </p>
                       <p className="text-sm text-green-700 dark:text-green-300">
                         {gap.resolution_notes}
                       </p>
                       {gap.resolved_at && (
                         <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                          Resolved: {formatDate(gap.resolved_at)}
+                          {t("resolvedAt")} {formatDate(gap.resolved_at)}
                         </p>
                       )}
                     </div>
@@ -237,7 +239,7 @@ export default function KnowledgeGapsPage() {
                   onClick={() => setSelectedGap(gap)}
                   className="px-4 py-2 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors text-sm"
                 >
-                  Resolve
+                  {t("resolve")}
                 </button>
               )}
             </div>
@@ -249,21 +251,21 @@ export default function KnowledgeGapsPage() {
       {selectedGap && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-semibold mb-4">Resolve Knowledge Gap</h2>
+            <h2 className="text-2xl font-semibold mb-4">{t("resolveKnowledgeGap")}</h2>
             <div className="space-y-4 mb-6">
               <div>
-                <p className="text-sm font-semibold mb-1">Question:</p>
+                <p className="text-sm font-semibold mb-1">{t("question")}</p>
                 <p className="text-sm text-slate-600 dark:text-slate-300">{selectedGap.question}</p>
               </div>
               <div>
-                <p className="text-sm font-semibold mb-1">Requested Info:</p>
+                <p className="text-sm font-semibold mb-1">{t("requestedInfo")}</p>
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   {selectedGap.requested_info}
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Resolution Notes *
+                  {t("resolutionNotesRequired")}
                 </label>
                 <textarea
                   value={resolutionNotes}
@@ -271,7 +273,7 @@ export default function KnowledgeGapsPage() {
                   rows={4}
                   required
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:border-slate-700 dark:bg-slate-800"
-                  placeholder="Describe how you resolved this knowledge gap..."
+                  placeholder={t("resolutionNotesPlaceholder")}
                 />
               </div>
               <div>
@@ -283,7 +285,7 @@ export default function KnowledgeGapsPage() {
                     className="rounded"
                   />
                   <span className="text-sm font-medium">
-                    Add to Business Knowledge Base
+                    {t("addToKnowledgeBase")}
                   </span>
                 </label>
                 {addToKnowledgeBase && (
@@ -292,7 +294,7 @@ export default function KnowledgeGapsPage() {
                     onChange={(e) => setKnowledgeChunkContent(e.target.value)}
                     rows={4}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:border-slate-700 dark:bg-slate-800 mt-2"
-                    placeholder="Enter the information that should be added to the knowledge base..."
+                    placeholder={t("knowledgeChunkPlaceholder")}
                   />
                 )}
               </div>
@@ -303,7 +305,7 @@ export default function KnowledgeGapsPage() {
                 disabled={resolving || !resolutionNotes.trim()}
                 className="px-6 py-3 bg-brand-accent text-white rounded-lg hover:bg-brand-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {resolving ? "Resolving..." : "Resolve"}
+                {resolving ? t("resolving") : t("resolve")}
               </button>
               <button
                 onClick={() => {
@@ -314,7 +316,7 @@ export default function KnowledgeGapsPage() {
                 }}
                 className="px-6 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </div>

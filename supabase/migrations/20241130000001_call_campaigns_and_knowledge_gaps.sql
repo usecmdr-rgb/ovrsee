@@ -251,3 +251,10 @@ COMMENT ON COLUMN call_campaigns.allowed_days_of_week IS 'Array of day abbreviat
 COMMENT ON COLUMN call_campaigns.timezone IS 'IANA timezone string (e.g., "America/New_York") for time window calculations';
 COMMENT ON COLUMN agent_knowledge_gaps.context_id IS 'Flexible reference to source (call_log id, email thread id, conversation id, etc.)';
 
+
+
+
+
+
+
+

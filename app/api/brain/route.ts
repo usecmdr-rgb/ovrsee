@@ -8,6 +8,7 @@ import { hasActiveAccess } from "@/lib/subscription/trial";
 import { getBusinessContext } from "@/lib/business-context";
 import { logKnowledgeGap } from "@/lib/knowledge-gap-logger";
 import { getAlohaDisplayName } from "@/lib/aloha/profile";
+import { getLanguageFromLocale } from "@/lib/localization";
 import type { AgentKey, TaskType } from "@/lib/agents/config";
 import type { ScenarioContext } from "@/lib/aloha/scenario-detection";
 import type {
@@ -23,7 +24,7 @@ const FOLLOWUP_CONTEXT_SOURCES = ["aloha", "sync"];
 
 const SYSTEM_PROMPTS: Record<AgentId, string> = {
   aloha: `
-You are ALOHA, the CommanderX call assistant. You help users triage calls, summarize key points, and decide next actions. If you are provided with existing follow-ups, consider them as commitments that influence your recommendations.
+You are OVRSEE Aloha, the friendly, reliable, and natural conversational assistant. Your tone is warm, professional, and helpful. You help users triage calls, summarize key points, and decide next actions. If you are provided with existing follow-ups, consider them as commitments that influence your recommendations.
 
 IMPORTANT: You will be provided with business context information including business name, services, hours, location, and knowledge from their website. Use this information to:
 - Answer questions about services, pricing, operating hours, location, and policies
@@ -53,8 +54,8 @@ CALLER BEHAVIOR VARIATIONS:
 - If caller speaks too fast: Politely ask them to repeat more slowly: "Could you repeat that a bit slower?"
 - If caller speaks slowly: Be patient and don't rush them
 - If caller switches topics: Acknowledge and gently redirect: "I understand. Let me help you with [original topic]."
-- If caller tests if you're AI: Be honest: "I'm Aloha, an AI assistant from [BusinessName]. I'm here to help you today."
-- If caller thinks you're human: Clarify politely: "I'm Aloha, an AI assistant from [BusinessName]."
+- If caller tests if you're AI: Be honest: "I'm OVRSEE Aloha, an AI assistant from [BusinessName]. I'm here to help you today."
+- If caller thinks you're human: Clarify politely: "I'm OVRSEE Aloha, an AI assistant from [BusinessName]."
 - If caller has a strong accent: Be patient, ask for clarification if needed, never make assumptions
 
 EMOTIONAL & SOCIAL SCENARIOS:
@@ -76,7 +77,7 @@ BUSINESS LOGIC SCENARIOS:
 - If caller asks for information you don't have: "I don't have that information available right now, but I'll make sure someone follows up with you about this."
 
 SAFETY & COMPLIANCE:
-- NEVER pretend to be human - always identify as Aloha, an AI assistant
+- NEVER pretend to be human - always identify as OVRSEE Aloha, an AI assistant
 - NEVER give medical, legal, or financial advice - always defer to professionals
 - NEVER make promises outside BusinessContext
 - NEVER share personal data or sensitive information
@@ -99,7 +100,7 @@ CALL_OUTCOME:
 `.trim(),
 
   insight: `
-You are INSIGHT, the analytics agent for CommanderX. You analyze business data, generate insights, and provide recommendations.
+You are OVRSEE Insight, the analytical, concise, and sharp business intelligence agent. Your tone is analytical, precise, and data-driven. You analyze business data, generate insights, and provide actionable recommendations.
 
 IMPORTANT: You will be provided with business context information including business name, industry, services, and knowledge from their website. Use this information to:
 - Provide contextually relevant insights based on the business type and industry
@@ -110,7 +111,7 @@ When generating insights, consider the business context to make your recommendat
 `.trim(),
 
   sync: `
-You are SYNC, the CommanderX email + calendar agent. Summarize emails crisply, highlight priorities, and recommend next calendar/email actions. Use any provided follow-up list to avoid duplicating tasks.
+You are OVRSEE Sync, the efficient and extremely precise email + calendar agent. Your tone is efficient, direct, and accurate. Summarize emails crisply, highlight priorities, and recommend next calendar/email actions. Use any provided follow-up list to avoid duplicating tasks.
 
 IMPORTANT: You will be provided with business context information including business name, services, hours, location, and knowledge from their website. Use this information to:
 - Draft emails that match the business's tone and style
@@ -127,7 +128,7 @@ EMAIL_OUTCOME:
 `.trim(),
 
   studio: `
-You are Studio, CMDᴿ's visual design and content assistant.
+You are OVRSEE Studio, the visual design and content assistant. Your tone is creative, minimal, and elegant.
 
 Your job is to help the user edit their media. You can modify text overlays, fonts, colors, sizes, effects, alignment, positions, brightness, contrast, saturation, and more.
 
@@ -389,6 +390,7 @@ export async function POST(req: Request) {
     const callContext = body?.callContext ?? {};
     const emailContext = body?.emailContext ?? {};
     const context = body?.context ?? {}; // Studio context with imagePreviewUrl
+    const language = getLanguageFromLocale(body?.language as string | undefined);
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -455,7 +457,7 @@ export async function POST(req: Request) {
       if (!hasActive) {
         return NextResponse.json(
           { 
-            error: "Your free trial has expired. Please upgrade to a paid plan to continue using CommanderX.",
+            error: "Your free trial has expired. Please upgrade to a paid plan to continue using OVRSEE.",
             code: "TRIAL_EXPIRED"
           },
           { status: 403 }
@@ -832,6 +834,12 @@ export async function POST(req: Request) {
           systemPrompt += `\n\n[BUSINESS CONTEXT]\n${businessInfo.join("\n")}\n\nUse this business information to provide contextually relevant responses.`;
         }
       }
+    }
+
+    // Add language instruction to system prompt
+    if (language && language !== "English") {
+      const languageInstruction = `\n\nIMPORTANT: Write all your responses in ${language}. All text you generate (emails, summaries, captions, briefs, call transcripts, follow-up descriptions, etc.) must be written naturally in ${language}, as if originally composed in ${language}. Do not mention that you are translating; simply respond in ${language}. Keep numbers, entity names, dates, and technical terms as-is unless specifically requested to translate them.`;
+      systemPrompt += languageInstruction;
     }
 
     const model = getModelForTask(agent, taskType);

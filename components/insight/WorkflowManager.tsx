@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Workflow, Zap, Plus, Trash2, Edit2, Play, Loader2, ToggleLeft, ToggleRight } from "lucide-react";
 import type { Workflow as WorkflowType, WorkflowTrigger, WorkflowCondition } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export default function WorkflowManager() {
+  const t = useTranslation();
   const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,11 +17,7 @@ export default function WorkflowManager() {
   // Mock userId - in production, get from auth context
   const userId = "user-1";
 
-  useEffect(() => {
-    fetchWorkflows();
-  }, []);
-
-  const fetchWorkflows = async () => {
+  const fetchWorkflows = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -30,14 +28,18 @@ export default function WorkflowManager() {
       if (result.ok) {
         setWorkflows(result.data || []);
       } else {
-        setError(result.error || "Failed to fetch workflows");
+        setError(result.error || t("workflowFailedToFetch"));
       }
     } catch (err: any) {
-      setError(err.message || "Failed to fetch workflows");
+      setError(err.message || t("workflowFailedToFetch"));
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, t]);
+
+  useEffect(() => {
+    fetchWorkflows();
+  }, [fetchWorkflows]);
 
   const createWorkflow = async (workflow: Omit<WorkflowType, "id" | "createdAt" | "updatedAt">) => {
     try {
@@ -54,17 +56,17 @@ export default function WorkflowManager() {
         setShowCreateForm(false);
         return true;
       } else {
-        setError(result.error || "Failed to create workflow");
+        setError(result.error || t("workflowFailedToCreate"));
         return false;
       }
     } catch (err: any) {
-      setError(err.message || "Failed to create workflow");
+      setError(err.message || t("workflowFailedToCreate"));
       return false;
     }
   };
 
   const deleteWorkflow = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this workflow?")) return;
+    if (!confirm(t("workflowConfirmDelete"))) return;
 
     try {
       const response = await fetch(`/api/insight/workflows/${id}`, {
@@ -76,10 +78,10 @@ export default function WorkflowManager() {
       if (result.ok) {
         await fetchWorkflows();
       } else {
-        setError(result.error || "Failed to delete workflow");
+        setError(result.error || t("workflowFailedToDelete"));
       }
     } catch (err: any) {
-      setError(err.message || "Failed to delete workflow");
+      setError(err.message || t("workflowFailedToDelete"));
     }
   };
 
@@ -96,10 +98,10 @@ export default function WorkflowManager() {
       if (result.ok) {
         await fetchWorkflows();
       } else {
-        setError(result.error || "Failed to update workflow");
+        setError(result.error || t("workflowFailedToUpdate"));
       }
     } catch (err: any) {
-      setError(err.message || "Failed to update workflow");
+      setError(err.message || t("workflowFailedToUpdate"));
     }
   };
 
@@ -116,12 +118,12 @@ export default function WorkflowManager() {
       const result = await response.json();
 
       if (result.ok) {
-        alert(`Workflow executed: ${result.message || "Success"}`);
+        alert(t("workflowExecuted").replace("{message}", result.message || t("workflowUpdate")));
       } else {
-        setError(result.error || "Failed to execute workflow");
+        setError(result.error || t("workflowFailedToExecute"));
       }
     } catch (err: any) {
-      setError(err.message || "Failed to execute workflow");
+      setError(err.message || t("workflowFailedToExecute"));
     } finally {
       setExecutingWorkflow(null);
     }
@@ -131,15 +133,15 @@ export default function WorkflowManager() {
     <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-xl font-semibold">My Automations</h3>
-          <p className="text-sm text-slate-500 mt-1">Multi-agent workflow engine</p>
+          <h3 className="text-xl font-semibold">{t("workflowMyAutomations")}</h3>
+          <p className="text-sm text-slate-500 mt-1">{t("workflowMultiAgentEngine")}</p>
         </div>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
           className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 flex items-center gap-2"
         >
           <Plus size={16} />
-          New Workflow
+          {t("workflowNewWorkflow")}
         </button>
       </div>
 
@@ -163,7 +165,7 @@ export default function WorkflowManager() {
       ) : workflows.length === 0 ? (
         <div className="text-center py-8 text-slate-500">
           <Zap size={48} className="mx-auto mb-3 opacity-50" />
-          <p>No workflows yet. Create your first automation!</p>
+          <p>{t("workflowNoWorkflows")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -191,21 +193,21 @@ export default function WorkflowManager() {
                         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
                         : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                     }`}>
-                      {workflow.enabled ? "Enabled" : "Disabled"}
+                      {workflow.enabled ? t("workflowEnabled") : t("workflowDisabled")}
                     </span>
                   </div>
                   {workflow.description && (
                     <p className="text-sm text-slate-500 mb-2">{workflow.description}</p>
                   )}
                   <div className="text-xs text-slate-500 space-y-1">
-                    <p><span className="font-semibold">Trigger:</span> {workflow.trigger}</p>
+                    <p><span className="font-semibold">{t("workflowTrigger")}</span> {workflow.trigger}</p>
                     {workflow.condition && (
                       <p>
-                        <span className="font-semibold">Condition:</span> {workflow.condition.field} {workflow.condition.operator} {workflow.condition.value}
+                        <span className="font-semibold">{t("workflowCondition")}</span> {workflow.condition.field} {workflow.condition.operator} {workflow.condition.value}
                       </p>
                     )}
                     <p>
-                      <span className="font-semibold">Actions:</span> {workflow.actions.join(", ")}
+                      <span className="font-semibold">{t("workflowActions")}</span> {workflow.actions.join(", ")}
                     </p>
                   </div>
                 </div>
@@ -220,11 +222,12 @@ export default function WorkflowManager() {
                     ) : (
                       <Play size={12} />
                     )}
-                    Run
+                    {t("workflowRun")}
                   </button>
                   <button
                     onClick={() => setEditingWorkflow(workflow)}
                     className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                    aria-label={t("workflowEditWorkflow")}
                   >
                     <Edit2 size={12} />
                   </button>
@@ -260,11 +263,11 @@ export default function WorkflowManager() {
                 setEditingWorkflow(null);
                 return true;
               } else {
-                setError(result.error || "Failed to update workflow");
+                setError(result.error || t("workflowFailedToUpdate"));
                 return false;
               }
             } catch (err: any) {
-              setError(err.message || "Failed to update workflow");
+              setError(err.message || t("workflowFailedToUpdate"));
               return false;
             }
           }}
@@ -284,6 +287,7 @@ function WorkflowForm({
   onSave: (workflow: Omit<WorkflowType, "id" | "createdAt" | "updatedAt">) => Promise<boolean>;
   onCancel: () => void;
 }) {
+  const t = useTranslation();
   const [name, setName] = useState(workflow?.name || "");
   const [description, setDescription] = useState(workflow?.description || "");
   const [trigger, setTrigger] = useState<WorkflowTrigger>(workflow?.trigger || "email.received");
@@ -343,11 +347,11 @@ function WorkflowForm({
 
   return (
     <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white/80 p-4 mb-4 dark:border-slate-800 dark:bg-slate-900/60">
-      <h4 className="font-semibold mb-4">{workflow ? "Edit Workflow" : "Create Workflow"}</h4>
+      <h4 className="font-semibold mb-4">{workflow ? t("workflowEditWorkflow") : t("workflowCreateWorkflow")}</h4>
       
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-semibold mb-1">Name</label>
+          <label className="block text-sm font-semibold mb-1">{t("workflowName")}</label>
           <input
             type="text"
             value={name}
@@ -358,7 +362,7 @@ function WorkflowForm({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-1">Description</label>
+          <label className="block text-sm font-semibold mb-1">{t("workflowDescription")}</label>
           <input
             type="text"
             value={description}
@@ -368,29 +372,29 @@ function WorkflowForm({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-1">Trigger</label>
+          <label className="block text-sm font-semibold mb-1">{t("workflowTriggerLabel")}</label>
           <select
             value={trigger}
             onChange={(e) => setTrigger(e.target.value as WorkflowTrigger)}
             required
             className="w-full rounded-2xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700"
           >
-            {availableTriggers.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {availableTriggers.map((trig) => (
+              <option key={trig} value={trig}>
+                {trig}
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-1">Condition (Optional)</label>
+          <label className="block text-sm font-semibold mb-1">{t("workflowConditionOptional")}</label>
           <div className="grid grid-cols-3 gap-2">
             <input
               type="text"
               value={conditionField}
               onChange={(e) => setConditionField(e.target.value)}
-              placeholder="Field"
+              placeholder={t("workflowConditionField")}
               className="rounded-2xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700"
             />
             <select
@@ -398,24 +402,24 @@ function WorkflowForm({
               onChange={(e) => setConditionOperator(e.target.value as WorkflowCondition["operator"])}
               className="rounded-2xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700"
             >
-              <option value="contains">contains</option>
-              <option value="equals">equals</option>
-              <option value="greaterThan">greaterThan</option>
-              <option value="lessThan">lessThan</option>
-              <option value="exists">exists</option>
+              <option value="contains">{t("workflowConditionContains")}</option>
+              <option value="equals">{t("workflowConditionEquals")}</option>
+              <option value="greaterThan">{t("workflowConditionGreaterThan")}</option>
+              <option value="lessThan">{t("workflowConditionLessThan")}</option>
+              <option value="exists">{t("workflowConditionExists")}</option>
             </select>
             <input
               type="text"
               value={conditionValue}
               onChange={(e) => setConditionValue(e.target.value)}
-              placeholder="Value"
+              placeholder={t("workflowConditionValue")}
               className="rounded-2xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-1">Actions</label>
+          <label className="block text-sm font-semibold mb-1">{t("workflowActionsLabel")}</label>
           <div className="space-y-2">
             {availableActions.map((action) => (
               <label key={action} className="flex items-center gap-2 cursor-pointer">
@@ -439,7 +443,7 @@ function WorkflowForm({
               onChange={(e) => setEnabled(e.target.checked)}
               className="w-4 h-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
             />
-            <span className="text-sm font-semibold">Enabled</span>
+            <span className="text-sm font-semibold">{t("workflowEnabledLabel")}</span>
           </label>
         </div>
 
@@ -448,14 +452,14 @@ function WorkflowForm({
             type="submit"
             className="flex-1 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
           >
-            {workflow ? "Update" : "Create"}
+            {workflow ? t("workflowUpdate") : t("workflowCreate")}
           </button>
           <button
             type="button"
             onClick={onCancel}
             className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
-            Cancel
+            {t("cancel")}
           </button>
         </div>
       </div>

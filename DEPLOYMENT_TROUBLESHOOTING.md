@@ -3,7 +3,7 @@
 ## If you're not seeing the Aloha settings changes after deployment:
 
 ### 1. Verify the commit is on GitHub
-- Check: https://github.com/usecmdr-rgb/commanderx-site/commits/main
+- Check: https://github.com/usecmdr-rgb/ovrsee-site/commits/main
 - Look for commit `d3446db` - "Add missing conversation layers sections to Aloha settings page"
 - The commit should be visible on GitHub
 

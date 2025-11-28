@@ -42,8 +42,42 @@ export async function GET(request: NextRequest) {
       .eq("id", userId)
       .single();
 
-    if (profileError || !profile) {
-      return createErrorResponse("User profile not found", 404, profileError);
+    const buildDefaultResponse = async () => {
+      const hasUsedTrialFallback = userEmail ? await hasEmailUsedTrial(userEmail) : false;
+      const retentionStatus = await getDataRetentionStatus(userId);
+
+      return NextResponse.json({
+        subscription: {
+          tier: null,
+          status: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+          trialEnd: null,
+        },
+        paymentMethod: null,
+        trial: {
+          hasUsedTrial: hasUsedTrialFallback,
+          isExpired: false,
+        },
+        retention: {
+          isInRetentionWindow: retentionStatus.hasRetentionWindow && !retentionStatus.isExpired,
+          daysRemaining: retentionStatus.daysRemaining,
+          isDataCleared: retentionStatus.isDataCleared,
+          reason: retentionStatus.reason,
+        },
+      });
+    };
+
+    if (profileError) {
+      console.warn("No profile found for user, returning default subscription state", {
+        userId,
+        code: profileError.code,
+        message: profileError.message,
+      });
+    }
+
+    if (!profile) {
+      return buildDefaultResponse();
     }
 
     // ============================================

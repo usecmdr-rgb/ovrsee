@@ -56,34 +56,43 @@ const LanguageSelector = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-        aria-label="Select language"
+        className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 text-slate-600 transition hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:text-slate-300 dark:hover:text-slate-100 dark:focus-visible:outline-white"
+        aria-label={`Select language. Current language: ${currentLanguage.name}`}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
       >
-        <span className="text-[9.6px]">{currentLanguage.flag}</span>
+        <span className="text-[9.6px]" aria-hidden="true">{currentLanguage.flag}</span>
         <span className="hidden text-sm font-medium sm:inline">{currentLanguage.code.toUpperCase()}</span>
         <ChevronDown
           size={10}
           className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+          aria-hidden="true"
         />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <div 
+          className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          role="listbox"
+          aria-label="Language selection"
+        >
           <div className="py-1">
             {languages.map((lang) => (
               <button
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition ${
+                role="option"
+                aria-selected={language === lang.code}
+                className={`w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:focus-visible:outline-white ${
                   language === lang.code
                     ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                     : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                 }`}
               >
-                <span className="text-[14.4px]">{lang.flag}</span>
+                <span className="text-[14.4px]" aria-hidden="true">{lang.flag}</span>
                 <span className="flex-1">{lang.name}</span>
                 {language === lang.code && (
-                  <span className="text-xs text-slate-500">✓</span>
+                  <span className="text-xs text-slate-500" aria-hidden="true">✓</span>
                 )}
               </button>
             ))}

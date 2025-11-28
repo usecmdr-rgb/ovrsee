@@ -4,30 +4,32 @@ import { useState } from "react";
 import { Facebook, Globe, Instagram, Linkedin, Loader2, RefreshCcw, X as TwitterX } from "lucide-react";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 import type { ConnectedAccountType } from "@/types";
-
-const platformLabelMap: Record<ConnectedAccountType, string> = {
-  facebook: "Facebook",
-  instagram: "Instagram",
-  x: "X (Twitter)",
-  linkedin: "LinkedIn",
-  website: "Website",
-  other: "Other",
-};
-
-const platformIconMap: Record<ConnectedAccountType, JSX.Element> = {
-  facebook: <Facebook className="h-5 w-5" />,
-  instagram: <Instagram className="h-5 w-5" />,
-  x: <TwitterX className="h-5 w-5" />,
-  linkedin: <Linkedin className="h-5 w-5" />,
-  website: <Globe className="h-5 w-5" />,
-  other: <Globe className="h-5 w-5" />,
-};
+import { useTranslation } from "@/hooks/useTranslation";
 
 const SettingsConnectionsSection = () => {
   const { accounts, isLoading, error, connectAccount, disconnectAccount, refresh } = useConnectedAccounts();
+  const t = useTranslation();
   const [connecting, setConnecting] = useState<ConnectedAccountType | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  
+  const platformLabelMap: Record<ConnectedAccountType, string> = {
+    facebook: t("connectionsPlatformFacebook"),
+    instagram: t("connectionsPlatformInstagram"),
+    x: t("connectionsPlatformX"),
+    linkedin: t("connectionsPlatformLinkedIn"),
+    website: t("connectionsPlatformWebsite"),
+    other: t("connectionsPlatformOther"),
+  };
+
+  const platformIconMap: Record<ConnectedAccountType, JSX.Element> = {
+    facebook: <Facebook className="h-5 w-5" />,
+    instagram: <Instagram className="h-5 w-5" />,
+    x: <TwitterX className="h-5 w-5" />,
+    linkedin: <Linkedin className="h-5 w-5" />,
+    website: <Globe className="h-5 w-5" />,
+    other: <Globe className="h-5 w-5" />,
+  };
 
   const handleConnect = async (type: ConnectedAccountType) => {
     try {
@@ -35,7 +37,7 @@ const SettingsConnectionsSection = () => {
       setConnecting(type);
       await connectAccount(type);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Unable to connect account.");
+      setLocalError(err instanceof Error ? err.message : t("connectionsUnableToConnect"));
     } finally {
       setConnecting(null);
     }
@@ -47,7 +49,7 @@ const SettingsConnectionsSection = () => {
       setDisconnectingId(accountId);
       await disconnectAccount(accountId);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Unable to disconnect account.");
+      setLocalError(err instanceof Error ? err.message : t("connectionsUnableToDisconnect"));
     } finally {
       setDisconnectingId(null);
     }
@@ -57,9 +59,9 @@ const SettingsConnectionsSection = () => {
     <section>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Connected accounts</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{t("connectionsTitle")}</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Manage the social profiles linked to Studio sharing.
+            {t("connectionsDescription")}
           </p>
         </div>
         <button
@@ -68,19 +70,19 @@ const SettingsConnectionsSection = () => {
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           <RefreshCcw className="h-3.5 w-3.5" />
-          Refresh
+          {t("connectionsRefresh")}
         </button>
       </div>
 
       <div className="mt-4 space-y-3">
         {isLoading && (
           <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500 dark:border-slate-700">
-            Loading connections…
+            {t("connectionsLoading")}
           </div>
         )}
         {!isLoading && accounts.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500 dark:border-slate-700">
-            No connected accounts yet. Connect a platform to start sharing.
+            {t("connectionsNoAccounts")}
           </div>
         )}
         {accounts.map((account) => (
@@ -105,7 +107,7 @@ const SettingsConnectionsSection = () => {
                     : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                 }`}
               >
-                {account.isConnected ? "Connected" : "Not connected"}
+                {account.isConnected ? t("connectionsConnected") : t("connectionsNotConnected")}
               </span>
               {account.isConnected ? (
                 <button
@@ -117,10 +119,10 @@ const SettingsConnectionsSection = () => {
                   {disconnectingId === account.id ? (
                     <span className="inline-flex items-center gap-1">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Disconnecting…
+                      {t("connectionsDisconnecting")}
                     </span>
                   ) : (
-                    "Disconnect"
+                    t("connectionsDisconnect")
                   )}
                 </button>
               ) : (
@@ -133,10 +135,10 @@ const SettingsConnectionsSection = () => {
                   {connecting === account.type ? (
                     <span className="inline-flex items-center gap-1">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Connecting…
+                      {t("connectionsConnecting")}
                     </span>
                   ) : (
-                    "Connect"
+                    t("connectionsConnect")
                   )}
                 </button>
               )}

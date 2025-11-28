@@ -222,3 +222,10 @@ export async function hasBusinessProfile(userId: string): Promise<boolean> {
   return !error && !!data;
 }
 
+
+
+
+
+
+
+

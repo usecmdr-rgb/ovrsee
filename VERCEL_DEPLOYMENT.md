@@ -1,6 +1,6 @@
 # Vercel Deployment Guide
 
-This guide explains how to deploy CommanderX to Vercel.
+This guide explains how to deploy OVRSEE to Vercel.
 
 ## Prerequisites
 

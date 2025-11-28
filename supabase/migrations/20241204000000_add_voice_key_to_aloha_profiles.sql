@@ -16,3 +16,10 @@ ALTER COLUMN voice_key SET DEFAULT 'aloha_voice_friendly_female_us';
 -- Add comment
 COMMENT ON COLUMN aloha_profiles.voice_key IS 'Selected voice profile key (one of 4 predefined Aloha voice profiles)';
 
+
+
+
+
+
+
+

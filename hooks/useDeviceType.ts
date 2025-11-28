@@ -36,3 +36,10 @@ export const useDeviceType = () => {
   };
 };
 
+
+
+
+
+
+
+

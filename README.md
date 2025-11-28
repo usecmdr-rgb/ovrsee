@@ -1,13 +1,13 @@
-# CommanderX Site
+# OVRSEE
 
-A modern AI-powered command center application built with Next.js, React, and TypeScript.
+AI agents for modern business. Delegate calls, inbox, content, and insights to OVRSEE. Four focused AI agents handle communications, media polish, and reporting so you can stay on high-value work.
 
-## Features
+## Agents
 
-- **Aloha Agent**: Call management and appointment scheduling
-- **Sync Agent**: Gmail integration and Google Calendar synchronization
-- **Studio Agent**: Media management and content creation
-- **Insight Agent**: Analytics and business intelligence
+- **OVRSEE Aloha**: Voice and call assistant. Answers calls, books appointments, and keeps calendars tidy.
+- **OVRSEE Sync**: Email and calendar agent. Drafts replies, prioritizes inboxes, and syncs schedules.
+- **OVRSEE Studio**: Media and branding agent. Edits images and videos, and provides social media performance insights.
+- **OVRSEE Insight**: Business intelligence agent. Rolls up every signal into clean, actionable insight.
 
 ## Tech Stack
 
@@ -33,8 +33,8 @@ A modern AI-powered command center application built with Next.js, React, and Ty
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/usecmdr-rgb/commanderx-site.git
-cd commanderx-site
+git clone https://github.com/usecmdr-rgb/ovrsee-site.git
+cd ovrsee-site
 ```
 
 2. Install dependencies:
@@ -109,7 +109,7 @@ See `.env.local.example` for all required environment variables.
 
 Private - All rights reserved
 
-## Author
+## About OVRSEE
 
-usecmdr-rgb
+OVRSEE is an AI-powered platform that helps small and medium businesses delegate routine operations to specialized AI agents. Our four agents—Aloha, Sync, Studio, and Insight—handle communications, media enhancement, and business intelligence so you can focus on high-value work.
 

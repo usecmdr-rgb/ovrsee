@@ -9,85 +9,12 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/useTranslation";
 
-const tiers = [
-  {
-    name: "Basic",
-    price: "€29.99",
-    subtitle: "Get started with Sync.",
-    badge: "Best for individuals",
-    features: [
-      "Includes Sync",
-      "Smart email parsing",
-      "Basic task automation",
-      "Daily summaries",
-      "1 connected inbox/calendar",
-      "Standard support",
-    ],
-    highlight: false,
-  },
-  {
-    name: "Advanced",
-    price: "€79.99",
-    subtitle: "Unlock Aloha and Studio.",
-    badge: "Most popular",
-    features: [
-      "Includes Sync + Aloha + Studio",
-      "Full inbox management",
-      "Calendar optimization & smart scheduling",
-      "Data & analytics via Studio",
-      "Multi-account support",
-      "Priority triage & smart reminders",
-    ],
-    highlight: true,
-  },
-  {
-    name: "Elite",
-    price: "€129.99",
-    subtitle: "Everything, plus Insight.",
-    badge: "For teams & agencies",
-    features: [
-      "Includes all agents (Sync, Aloha, Studio, Insight)",
-      "Company-wide analytics & reporting",
-      "High-frequency automations",
-      "Receptionist / call routing options",
-      "Custom AI pipeline & multi-agent workflows",
-      "Priority support & early access features",
-    ],
-    highlight: false,
-  },
-];
-
-const agentMatrix = [
-  {
-    agent: "Sync",
-    description: "Foundation layer — baseline automations.",
-    basic: true,
-    advanced: true,
-    elite: true,
-  },
-  {
-    agent: "Aloha",
-    description: "Deep Gmail + Calendar assistant.",
-    basic: false,
-    advanced: true,
-    elite: true,
-  },
-  {
-    agent: "Studio",
-    description: "Data & analytics automation.",
-    basic: false,
-    advanced: true,
-    elite: true,
-  },
-  {
-    agent: "Insight",
-    description: "Full brain + multi-agent orchestration.",
-    basic: false,
-    advanced: false,
-    elite: true,
-  },
-];
+// This component is now using PricingTable which has full translations
+// Keeping this file for reference but it's not actively used
+const tiers: any[] = [];
+const agentMatrix: any[] = [];
 
 function InclusionIcon({ included }: { included: boolean }) {
   if (included) {
@@ -105,16 +32,97 @@ function InclusionIcon({ included }: { included: boolean }) {
 }
 
 export default function PricingSection() {
+  const t = useTranslation();
+  
+  // Build tiers dynamically using translations
+  const tiers = [
+    {
+      name: t("basic"),
+      price: "€29.99",
+      subtitle: t("pricingTierBasicSubtitle"),
+      badge: t("pricingTierBasicBadge"),
+      features: [
+        t("pricingTierBasicFeature1"),
+        t("pricingTierBasicFeature2"),
+        t("pricingTierBasicFeature3"),
+        t("pricingTierBasicFeature4"),
+        t("pricingTierBasicFeature5"),
+        t("pricingTierBasicFeature6"),
+      ],
+      highlight: false,
+    },
+    {
+      name: t("advanced"),
+      price: "€79.99",
+      subtitle: t("pricingTierAdvancedSubtitle"),
+      badge: t("mostPopular"),
+      features: [
+        t("pricingTierAdvancedFeature1"),
+        t("pricingTierAdvancedFeature2"),
+        t("pricingTierAdvancedFeature3"),
+        t("pricingTierAdvancedFeature4"),
+        t("pricingTierAdvancedFeature5"),
+        t("pricingTierAdvancedFeature6"),
+      ],
+      highlight: true,
+    },
+    {
+      name: t("elite"),
+      price: "€129.99",
+      subtitle: t("pricingTierEliteSubtitle"),
+      badge: t("pricingTierEliteBadge"),
+      features: [
+        t("pricingTierEliteFeature1"),
+        t("pricingTierEliteFeature2"),
+        t("pricingTierEliteFeature3"),
+        t("pricingTierEliteFeature4"),
+        t("pricingTierEliteFeature5"),
+        t("pricingTierEliteFeature6"),
+      ],
+      highlight: false,
+    },
+  ];
+
+  const agentMatrix = [
+    {
+      agent: t("agentSync"),
+      description: t("pricingSyncDescription"),
+      basic: true,
+      advanced: true,
+      elite: true,
+    },
+    {
+      agent: t("agentAloha"),
+      description: t("pricingAlohaDescription"),
+      basic: false,
+      advanced: true,
+      elite: true,
+    },
+    {
+      agent: t("agentStudio"),
+      description: t("pricingStudioDescription"),
+      basic: false,
+      advanced: true,
+      elite: true,
+    },
+    {
+      agent: t("agentInsight"),
+      description: t("pricingInsightDescription"),
+      basic: false,
+      advanced: false,
+      elite: true,
+    },
+  ];
+
   return (
     <section className="w-full max-w-6xl mx-auto px-4 py-16 space-y-12">
       {/* Header */}
       <div className="text-center space-y-3">
         <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
-          Pricing that grows with your agents
+          {t("pricingThatGrowsTitle")}
         </h2>
         <p className="text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-          Start with Sync, then unlock Aloha, Studio, and Insight as you move from
-          Basic to Advanced to Elite tiers.
+          {t("pricingThatGrowsDescription")}
         </p>
       </div>
 
@@ -163,7 +171,7 @@ export default function PricingSection() {
                 }`}
                 variant={tier.highlight ? "default" : "secondary"}
               >
-                Choose {tier.name}
+                {t("pricingChooseTier").replace("{tier}", tier.name)}
               </Button>
             </CardContent>
           </Card>
@@ -173,11 +181,10 @@ export default function PricingSection() {
       {/* Agent access chart */}
       <div className="mt-10 space-y-4">
         <h3 className="text-lg md:text-xl font-semibold text-center">
-          Agent access per tier
+          {t("pricingAgentAccessChart")}
         </h3>
         <p className="text-xs md:text-sm text-muted-foreground text-center max-w-3xl mx-auto">
-          This chart clearly shows which agent is included in which tier. Sync is included in
-          all tiers, Aloha and Studio start at Advanced, and Insight is Elite only.
+          {t("pricingAgentAccessDescription")}
         </p>
 
         <div className="overflow-x-auto rounded-2xl border bg-background">
@@ -185,19 +192,19 @@ export default function PricingSection() {
             <thead>
               <tr className="border-b bg-muted/40">
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide">
-                  Agent
+                  {t("pricingAgentColumn")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide">
-                  Description
+                  {t("pricingDescriptionColumn")}
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide">
-                  Basic
+                  {t("pricingBasicColumn")}
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide">
-                  Advanced
+                  {t("pricingAdvancedColumn")}
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide">
-                  Elite
+                  {t("pricingEliteColumn")}
                 </th>
               </tr>
             </thead>

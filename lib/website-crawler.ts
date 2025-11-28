@@ -124,7 +124,7 @@ async function crawlUrl(url: string): Promise<CrawlResult> {
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; CommanderXBot/1.0; +https://commanderx.com/bot)",
+          "Mozilla/5.0 (compatible; OVRSEEBot/1.0; +https://ovrsee.com/bot)",
       },
       // Timeout after 10 seconds
       signal: AbortSignal.timeout(10000),
@@ -225,7 +225,7 @@ export async function crawlBusinessWebsite(
       const html = await fetch(url, {
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (compatible; CommanderXBot/1.0; +https://commanderx.com/bot)",
+            "Mozilla/5.0 (compatible; OVRSEEBot/1.0; +https://ovrsee.com/bot)",
         },
       }).then((r) => r.text());
 
@@ -303,4 +303,11 @@ export async function crawlBusinessWebsite(
     };
   }
 }
+
+
+
+
+
+
+
 

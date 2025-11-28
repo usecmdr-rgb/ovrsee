@@ -3,6 +3,7 @@
 import Modal from "@/components/ui/Modal";
 import { useAppState } from "@/context/AppStateContext";
 import SettingsConnectionsSection from "@/components/settings/ConnectionsSection";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const colorChoices = [
   "#ef4444",
@@ -24,11 +25,14 @@ const SettingsModal = () => {
     alertCategories,
     updateAlertColor,
   } = useAppState();
+  const t = useTranslation();
+
+  const notificationLabels = [t("settingsDailySummary"), t("settingsPaymentAlerts"), t("settingsWeeklyDigest")];
 
   return (
     <Modal
-      title="Workspace settings"
-      description="Customize theme, Sync alert colors, and notification stubs."
+      title={t("settingsModalTitle")}
+      description={t("settingsModalDescription")}
       open={showSettingsModal}
       onClose={() => setShowSettingsModal(false)}
       size="lg"
@@ -36,7 +40,7 @@ const SettingsModal = () => {
       <div className="space-y-6">
         <section>
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Theme
+            {t("settingsThemeTitle")}
           </h3>
           <div className="mt-3 flex gap-3">
             {(["light", "dark"] as const).map((mode) => (
@@ -56,14 +60,14 @@ const SettingsModal = () => {
         </section>
         <section>
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Sync alert colors
+            {t("settingsSyncAlertColors")}
           </h3>
           <div className="mt-3 space-y-4">
             {alertCategories.map((category) => (
               <div key={category.id} className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
                 <div>
                   <p className="text-sm font-semibold">{category.name}</p>
-                  <p className="text-xs text-slate-500">{category.count} items</p>
+                  <p className="text-xs text-slate-500">{category.count} {t("settingsItems")}</p>
                 </div>
                 <div className="flex gap-2">
                   {colorChoices.map((color) => (
@@ -84,10 +88,10 @@ const SettingsModal = () => {
         </section>
         <section>
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Notifications
+            {t("settingsNotifications")}
           </h3>
           <div className="space-y-3">
-            {["Daily summary", "Payment alerts", "Weekly digest"].map((label) => (
+            {notificationLabels.map((label) => (
               <label key={label} className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 text-sm dark:border-slate-800">
                 <span>{label}</span>
                 <input type="checkbox" className="h-5 w-5 rounded border-slate-300 text-brand-accent focus:ring-brand-accent" />

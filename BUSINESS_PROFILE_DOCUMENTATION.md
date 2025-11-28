@@ -306,3 +306,10 @@ To set up the Business Profile system:
    - Verify knowledge chunks are created
    - Test agent access to business context
 
+
+
+
+
+
+
+

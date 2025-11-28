@@ -314,3 +314,10 @@ Potential improvements:
 4. Voice analytics (which voices perform best)
 5. A/B testing different voices
 
+
+
+
+
+
+
+

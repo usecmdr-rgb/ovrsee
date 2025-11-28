@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { FileText, Loader2, AlertCircle, Calendar, TrendingUp, CheckCircle, ListChecks } from "lucide-react";
 import type { DailyBrief } from "@/types";
+import { useAppState } from "@/context/AppStateContext";
+import { getLanguageFromLocale } from "@/lib/localization";
 
 export default function DailyBriefCard() {
+  const { language } = useAppState();
   const [loading, setLoading] = useState(false);
   const [brief, setBrief] = useState<DailyBrief | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +20,9 @@ export default function DailyBriefCard() {
       const response = await fetch("/api/insight/brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          language: getLanguageFromLocale(language),
+        }),
       });
 
       const result = await response.json();

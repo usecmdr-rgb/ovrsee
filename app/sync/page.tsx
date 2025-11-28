@@ -9,6 +9,8 @@ import { useAgentAccess } from "@/hooks/useAgentAccess";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
 import { supabaseBrowserClient } from "@/lib/supabaseClient";
+import { useTranslation } from "@/hooks/useTranslation";
+import { getLanguageFromLocale } from "@/lib/localization";
 import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, Clock, MapPin, Users, FileText, Edit2 } from "lucide-react";
 
 interface ChatMessage {
@@ -52,7 +54,21 @@ interface CalendarEvent {
 
 const SyncPage = () => {
   const [activeTab, setActiveTab] = useState<"email" | "calendar">("email");
-  const { alertCategories, isAuthenticated, openAuthModal } = useAppState();
+  const { alertCategories, isAuthenticated, openAuthModal, language } = useAppState();
+  const t = useTranslation();
+  
+  // Helper function to translate category names
+  const getCategoryName = (categoryId: string): string => {
+    const categoryNameMap: Record<string, string> = {
+      important: t("important"),
+      missed: t("syncMissedUnread"),
+      payments: t("syncPaymentsBills"),
+      invoices: t("invoices"),
+      meetings: t("syncUpcomingMeetings"),
+      subscriptions: t("syncSubscriptions"),
+    };
+    return categoryNameMap[categoryId] || categoryId;
+  };
   
   // Email state
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -82,17 +98,28 @@ const SyncPage = () => {
   const { hasAccess, isLoading: accessLoading } = useAgentAccess("sync");
   const { stats, loading, error } = useAgentStats();
   
-  // Use preview/mock data if user doesn't have access
-  const isPreview = !hasAccess && !accessLoading;
+  // Wait for access to be determined before showing stats to prevent flashing
+  const isAccessReady = !accessLoading;
+  
+  // Use preview/mock data if user doesn't have access (only after access check is complete)
+  const isPreview = isAccessReady && !hasAccess;
   
   // Fallback to realistic random numbers if no stats available or in preview mode
-  const fallbackStats = {
-    ...emptyAgentStats,
-    xi_important_emails: isPreview ? 12 : 18,
-    xi_payments_bills: isPreview ? 4 : 7,
-    xi_invoices: isPreview ? 2 : 4,
-    xi_missed_emails: isPreview ? 2 : 3,
-  };
+  // Only show fallback stats when access check is complete to prevent number flashing
+  const fallbackStats = useMemo(() => {
+    if (!isAccessReady) {
+      // Return empty stats while loading to prevent flash
+      return emptyAgentStats;
+    }
+    return {
+      ...emptyAgentStats,
+      xi_important_emails: isPreview ? 12 : 18,
+      xi_payments_bills: isPreview ? 4 : 7,
+      xi_invoices: isPreview ? 2 : 4,
+      xi_missed_emails: isPreview ? 2 : 3,
+    };
+  }, [isPreview, isAccessReady]);
+  
   const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
   
@@ -685,6 +712,7 @@ const SyncPage = () => {
           agent: "sync",
           message: userMessage,
           taskType: "reply_draft",
+          language: getLanguageFromLocale(language),
           emailContext: {
             emailId: selectedEmail.id,
             subject: selectedEmail.subject,
@@ -732,13 +760,13 @@ const SyncPage = () => {
 
   const handleEmailSelect = (email: EmailRecord) => {
     setSelectedEmail(email);
-    setChatMessages([{ role: "agent", text: "Tell me how you'd like to change or edit the draft." }]);
+    setChatMessages([{ role: "agent", text: t("syncTellSyncToChange") }]);
   };
 
   // Calendar helpers
   const formatEventTime = (event: CalendarEvent) => {
     const start = event.start.dateTime || event.start.date;
-    if (!start) return "All day";
+    if (!start) return t("syncAllDay");
     const date = new Date(start);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
@@ -800,8 +828,8 @@ const SyncPage = () => {
         />
       )}
       <header>
-        <p className="text-sm uppercase tracking-widest text-slate-500">Sync agent</p>
-        <h1 className="text-3xl font-semibold">Inbox & calendar command board</h1>
+        <p className="text-sm uppercase tracking-widest text-slate-500">{t("syncAgent")}</p>
+        <h1 className="text-3xl font-semibold">{t("syncTitle")}</h1>
       </header>
 
       {/* Tab Bar */}
@@ -816,7 +844,7 @@ const SyncPage = () => {
                 : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
             }`}
           >
-            Email
+            {t("syncEmailTab")}
           </button>
           <button
             type="button"
@@ -827,7 +855,7 @@ const SyncPage = () => {
                 : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
             }`}
           >
-            Calendar
+            {t("syncCalendarTab")}
           </button>
         </div>
       </div>
@@ -846,17 +874,17 @@ const SyncPage = () => {
                 {isConnectingGmail ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting...
+                    {t("syncConnecting")}
                   </>
                 ) : isGmailConnected ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    Gmail Connected
+                    {t("syncGmailConnected")}
                   </>
                 ) : (
                   <>
                     <Mail className="h-4 w-4" />
-                    Connect your Gmail
+                    {t("syncConnectGmail")}
                   </>
                 )}
               </button>
@@ -864,17 +892,17 @@ const SyncPage = () => {
 
             <section className="rounded-3xl border border-slate-200 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-900/40">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Latest inbox metrics</p>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("syncLatestInboxMetrics")}</p>
                 {loading && <span className="text-xs text-slate-500">Loading stats…</span>}
                 {error && <span className="text-xs text-red-500">Couldn&apos;t load stats</span>}
                 {noStats && <span className="text-xs text-slate-500">No stats yet</span>}
               </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "Important emails", value: latestStats.xi_important_emails },
-                  { label: "Payments / bills", value: latestStats.xi_payments_bills },
-                  { label: "Invoices", value: latestStats.xi_invoices },
-                  { label: "Missed emails", value: latestStats.xi_missed_emails },
+                  { label: t("syncImportantEmails"), value: latestStats.xi_important_emails },
+                  { label: t("syncPaymentsBills"), value: latestStats.xi_payments_bills },
+                  { label: t("syncInvoices"), value: latestStats.xi_invoices },
+                  { label: t("syncMissedEmails"), value: latestStats.xi_missed_emails },
                 ].map((metric) => (
                   <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/60 min-w-0">
                     <p className="text-xs uppercase tracking-widest text-slate-500 break-words leading-tight">{metric.label}</p>
@@ -894,8 +922,8 @@ const SyncPage = () => {
                     activeCategory === category.id ? "ring-2 ring-white/70" : "opacity-90"
                   }`}
                 >
-                  <p>{category.name}</p>
-                  <p className="text-xs opacity-80">{category.count} alerts</p>
+                  <p>{getCategoryName(category.id)}</p>
+                  <p className="text-xs opacity-80">{category.count} {t("alerts")}</p>
                 </button>
               ))}
             </section>
@@ -903,10 +931,10 @@ const SyncPage = () => {
             <div className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
               <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Email queue</h2>
+                  <h2 className="text-xl font-semibold">{t("syncEmailQueue")}</h2>
                   {activeCategory && (
                     <button onClick={() => setActiveCategory(null)} className="text-xs uppercase tracking-wide text-brand-accent">
-                      Clear filter
+                      {t("syncClearFilter")}
                     </button>
                   )}
                 </div>
@@ -914,11 +942,11 @@ const SyncPage = () => {
                   {isLoadingEmails ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-                      <span className="ml-2 text-sm text-slate-500">Loading emails...</span>
+                      <span className="ml-2 text-sm text-slate-500">{t("syncLoadingEmails")}</span>
                     </div>
                   ) : filteredEmails.length === 0 ? (
                     <div className="py-8 text-center text-sm text-slate-500">
-                      {isGmailConnected ? "No emails found" : "Connect Gmail to view your emails"}
+                      {isGmailConnected ? t("syncNoEmailsFound") : t("syncConnectGmailToView")}
                     </div>
                   ) : (
                     filteredEmails.map((email) => (
@@ -939,7 +967,7 @@ const SyncPage = () => {
                             className="rounded-full px-2 py-1 text-white"
                             style={{ backgroundColor: categoryMap[email.categoryId]?.color || "#0f172a" }}
                           >
-                            {categoryMap[email.categoryId]?.name ?? "Uncategorized"}
+                            {email.categoryId ? getCategoryName(email.categoryId) : t("syncUncategorized")}
                           </span>
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 dark:bg-slate-800">
                             {email.status.replace("_", " ")}
@@ -952,31 +980,31 @@ const SyncPage = () => {
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-                <h2 className="text-xl font-semibold">Draft preview</h2>
+                <h2 className="text-xl font-semibold">{t("syncDraftPreview")}</h2>
                 {selectedEmail ? (
                   <div className="mt-4 space-y-4 text-slate-600 dark:text-slate-200">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">Original</p>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{t("syncOriginal")}</p>
                       <p className="mt-1 rounded-2xl bg-slate-100/70 p-3 text-sm dark:bg-slate-800/60">
                         {selectedEmail.snippet}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">Sync draft</p>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{t("syncDraft")}</p>
                       <p className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white">
-                        {selectedEmail.draft || "Placeholder draft goes here."}
+                        {selectedEmail.draft || t("syncPlaceholderDraft")}
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <button className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800 dark:bg-white dark:text-slate-900">
-                        Accept draft
+                        {t("syncAcceptDraft")}
                       </button>
                       <button className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
-                        Edit draft
+                        {t("syncEditDraft")}
                       </button>
                     </div>
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Chat with Sync</h3>
+                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t("syncChatWithSync")}</h3>
                       <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
                         {chatMessages.map((message, index) => (
                           <div
@@ -992,14 +1020,14 @@ const SyncPage = () => {
                         ))}
                         {isProcessing && (
                           <div className="rounded-2xl bg-slate-900/90 px-3 py-2 text-xs text-white dark:bg-slate-800">
-                            Processing your request...
+                            {t("syncProcessing")}
                           </div>
                         )}
                       </div>
                       <form onSubmit={handleChat} className="mt-3 flex gap-2">
                         <input
                           name="message"
-                          placeholder="Tell Sync how to change or edit the draft..."
+                          placeholder={t("syncPlaceholderChat")}
                           disabled={isProcessing}
                           className="flex-1 rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-xs focus:border-brand-accent focus:outline-none disabled:opacity-50 dark:border-slate-700"
                         />
@@ -1008,13 +1036,13 @@ const SyncPage = () => {
                           disabled={isProcessing}
                           className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
                         >
-                          Send
+                          {t("syncSend")}
                         </button>
                       </form>
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-500">Select an email to preview Sync&apos;s draft.</p>
+                  <p className="mt-4 text-sm text-slate-500">{t("syncSelectEmailToPreview")}</p>
                 )}
               </div>
             </div>
@@ -1033,17 +1061,17 @@ const SyncPage = () => {
                 {isConnectingCalendar ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting...
+                    {t("syncConnecting")}
                   </>
                 ) : isCalendarConnected ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    Calendar Connected
+                    {t("syncCalendarConnected")}
                   </>
                 ) : (
                   <>
                     <CalendarIcon className="h-4 w-4" />
-                    Connect Google Calendar
+                    {t("syncConnectGoogleCalendar")}
                   </>
                 )}
               </button>
@@ -1060,7 +1088,7 @@ const SyncPage = () => {
                     }}
                     className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                   >
-                    ← Previous
+                    {t("syncPrevious")}
                   </button>
                   <h2 className="text-xl font-semibold">
                     {selectedDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
@@ -1073,14 +1101,14 @@ const SyncPage = () => {
                     }}
                     className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                   >
-                    Next →
+                    {t("syncNext")}
                   </button>
                 </div>
 
                 {isLoadingEvents ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
-                    <span className="ml-2 text-sm text-slate-500">Loading calendar events...</span>
+                    <span className="ml-2 text-sm text-slate-500">{t("syncLoadingCalendarEvents")}</span>
                   </div>
                 ) : (
                   <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
@@ -1133,7 +1161,7 @@ const SyncPage = () => {
                               ))}
                               {day.events.length > 3 && (
                                 <div className="text-xs text-slate-500 px-2">
-                                  +{day.events.length - 3} more
+                                  +{day.events.length - 3} {t("syncMore")}
                                 </div>
                               )}
                             </div>
@@ -1147,15 +1175,15 @@ const SyncPage = () => {
             ) : (
               <div className="rounded-3xl border border-slate-200 bg-white/80 p-12 text-center dark:border-slate-800 dark:bg-slate-900/40">
                 <CalendarIcon className="h-12 w-12 mx-auto text-slate-400 mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Connect your Google Calendar</h3>
+                <h3 className="text-lg font-semibold mb-2">{t("syncConnectGoogleCalendar")}</h3>
                 <p className="text-sm text-slate-500 mb-6">
-                  Sync your calendar events, add notes and reminders, and integrate with Aloha for automatic appointment management.
+                  {t("syncConnectCalendarDescription")}
                 </p>
                 <button
                   onClick={handleConnectCalendar}
                   className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                 >
-                  Connect Google Calendar
+                  {t("syncConnectGoogleCalendar")}
                 </button>
               </div>
             )}
@@ -1183,12 +1211,12 @@ const SyncPage = () => {
                         {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4" />
-                            <span>{selectedEvent.attendees.length} attendee(s)</span>
+                            <span>{selectedEvent.attendees.length} {t("syncAttendees")}</span>
                           </div>
                         )}
                         {selectedEvent.createdByAloha && (
                           <div className="inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                            Created by Aloha
+                            {t("syncCreatedByAloha")}
                           </div>
                         )}
                       </div>
@@ -1212,7 +1240,7 @@ const SyncPage = () => {
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-sm font-semibold flex items-center gap-2">
                           <FileText className="h-4 w-4" />
-                          Notes
+                          {t("syncNotes")}
                         </label>
                         {!editingNote && (
                           <button
@@ -1220,7 +1248,7 @@ const SyncPage = () => {
                             className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                           >
                             <Edit2 className="h-3 w-3 inline mr-1" />
-                            Edit
+                            {t("syncEdit")}
                           </button>
                         )}
                       </div>
@@ -1228,45 +1256,45 @@ const SyncPage = () => {
                         <textarea
                           value={noteText}
                           onChange={(e) => setNoteText(e.target.value)}
-                          placeholder="Add your notes here..."
+                          placeholder={t("syncAddNotesPlaceholder")}
                           className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700 min-h-[100px]"
                         />
                       ) : (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/60 min-h-[100px]">
-                          {noteText || <span className="text-slate-400">No notes added</span>}
+                          {noteText || <span className="text-slate-400">{t("syncNoNotesAdded")}</span>}
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <label className="text-sm font-semibold mb-2 block">Memo</label>
+                      <label className="text-sm font-semibold mb-2 block">{t("syncMemo")}</label>
                       {editingNote ? (
                         <textarea
                           value={memoText}
                           onChange={(e) => setMemoText(e.target.value)}
-                          placeholder="Add a memo or reminder..."
+                          placeholder={t("syncAddMemoPlaceholder")}
                           className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700 min-h-[80px]"
                         />
                       ) : (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/60 min-h-[80px]">
-                          {memoText || <span className="text-slate-400">No memo</span>}
+                          {memoText || <span className="text-slate-400">{t("syncNoMemo")}</span>}
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <label className="text-sm font-semibold mb-2 block">Reminder</label>
+                      <label className="text-sm font-semibold mb-2 block">{t("syncReminder")}</label>
                       {editingNote ? (
                         <input
                           type="text"
                           value={reminderText}
                           onChange={(e) => setReminderText(e.target.value)}
-                          placeholder="Set a reminder..."
+                          placeholder={t("syncSetReminderPlaceholder")}
                           className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
                         />
                       ) : (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/60">
-                          {reminderText || <span className="text-slate-400">No reminder set</span>}
+                          {reminderText || <span className="text-slate-400">{t("syncNoReminderSet")}</span>}
                         </div>
                       )}
                     </div>
