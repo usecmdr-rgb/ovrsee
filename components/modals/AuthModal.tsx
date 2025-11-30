@@ -199,10 +199,18 @@ const AuthModal = () => {
     setError(null);
 
     try {
+      // Use explicit localhost URL for development, or current origin for production
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const redirectUrl = isLocalhost 
+        ? `${window.location.protocol}//${window.location.host}/app`
+        : `${window.location.origin}/app`;
+      
+      console.log("[OAuth] Redirect URL:", redirectUrl);
+      
       const { data, error: oauthError } = await supabaseBrowserClient.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/app`,
+          redirectTo: redirectUrl,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
