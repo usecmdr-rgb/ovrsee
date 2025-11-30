@@ -6,6 +6,10 @@ import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import { useAppState } from "@/context/AppStateContext";
 import { useTranslation } from "@/hooks/useTranslation";
 
+type DropdownItem = 
+  | { id: "business" | "billing" | "settings"; label: string }
+  | { id: "privacy" | "terms"; label: string; href: string };
+
 const UserMenu = () => {
   const router = useRouter();
   const {
@@ -19,17 +23,24 @@ const UserMenu = () => {
   const t = useTranslation();
   const [open, setOpen] = useState(false);
   
-  const dropdownItems = [
+  const dropdownItems: DropdownItem[] = [
     { id: "business", label: t("userMenuBusinessInfo") },
     { id: "billing", label: t("userMenuBilling") },
     { id: "settings", label: t("userMenuSettings") },
-    { id: "terms", label: t("userMenuTerms") },
+    { id: "privacy", label: "Privacy Policy", href: "/privacy" },
+    { id: "terms", label: t("userMenuTerms"), href: "/terms" },
   ];
 
   if (!isAuthenticated) return null;
 
-  const handleItemClick = (id: string) => {
-    switch (id) {
+  const handleItemClick = (item: DropdownItem) => {
+    if ("href" in item) {
+      router.push(item.href);
+      setOpen(false);
+      return;
+    }
+    
+    switch (item.id) {
       case "business":
         setShowBusinessModal(true);
         break;
@@ -38,9 +49,6 @@ const UserMenu = () => {
         break;
       case "settings":
         setShowSettingsModal(true);
-        break;
-      case "terms":
-        setShowTermsModal(true);
         break;
       default:
         break;
@@ -69,7 +77,7 @@ const UserMenu = () => {
           {dropdownItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => handleItemClick(item.id)}
+              onClick={() => handleItemClick(item)}
               role="menuitem"
               className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:outline-white"
             >
