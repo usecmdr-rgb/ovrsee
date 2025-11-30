@@ -100,7 +100,7 @@ export default function TableOfContents({ items, className = "" }: TableOfConten
         />
       </button>
       {isOpen && (
-        <div className="mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 space-y-1">
+        <div className="mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-1">
           {items.map((item) => renderItem(item))}
         </div>
       )}
@@ -110,7 +110,7 @@ export default function TableOfContents({ items, className = "" }: TableOfConten
   // Desktop sticky sidebar version
   const desktopTOC = (
     <aside className="hidden lg:block lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
-      <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700">
+      <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 uppercase tracking-wider">
           {t("tableOfContents") || "Table of Contents"}
         </h2>

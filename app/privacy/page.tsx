@@ -66,7 +66,7 @@ export default function PrivacyPage() {
             <div className="max-w-3xl mx-auto lg:mx-0 space-y-6">
               {/* Overview */}
               <section id="overview" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     1. {t("privacySection1Title")}
                   </h2>
@@ -79,7 +79,7 @@ export default function PrivacyPage() {
 
               {/* Information We Collect */}
               <section id="information-we-collect" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     2. {t("privacySection2Title")}
                   </h2>
@@ -129,7 +129,7 @@ export default function PrivacyPage() {
 
               {/* How We Use Information */}
               <section id="how-we-use" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     3. {t("privacySection3Title")}
                   </h2>
@@ -152,7 +152,7 @@ export default function PrivacyPage() {
 
               {/* How We Share Information */}
               <section id="how-we-share" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     4. {t("privacySection4Title")}
                   </h2>
@@ -171,7 +171,7 @@ export default function PrivacyPage() {
 
               {/* Data Retention */}
               <section id="data-retention" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     5. {t("privacySection5Title")}
                   </h2>
@@ -190,7 +190,7 @@ export default function PrivacyPage() {
 
               {/* Security */}
               <section id="security" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     6. {t("privacySection6Title")}
                   </h2>
@@ -210,7 +210,7 @@ export default function PrivacyPage() {
 
               {/* Your Rights */}
               <section id="your-rights" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     7. {t("privacySection7Title")}
                   </h2>
@@ -230,7 +230,7 @@ export default function PrivacyPage() {
 
               {/* Children's Privacy */}
               <section id="children-privacy" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     8. {t("privacySection8Title")}
                   </h2>
@@ -242,7 +242,7 @@ export default function PrivacyPage() {
 
               {/* International Data Transfers */}
               <section id="international-transfers" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     9. {t("privacySection9Title")}
                   </h2>
@@ -254,7 +254,7 @@ export default function PrivacyPage() {
 
               {/* Updates to This Policy */}
               <section id="updates" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     10. {t("privacySection10Title")}
                   </h2>

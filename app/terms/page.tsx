@@ -62,7 +62,7 @@ export default function TermsPage() {
             <div className="max-w-3xl mx-auto lg:mx-0 space-y-6">
               {/* Agreement to Terms */}
               <section id="agreement" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     1. {t("termsSection1Title")}
                   </h2>
@@ -74,7 +74,7 @@ export default function TermsPage() {
 
               {/* Description of Service */}
               <section id="description" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     2. {t("termsSection2Title")}
                   </h2>
@@ -93,7 +93,7 @@ export default function TermsPage() {
 
               {/* Eligibility */}
               <section id="eligibility" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     3. {t("termsSection3Title")}
                   </h2>
@@ -105,7 +105,7 @@ export default function TermsPage() {
 
               {/* Accounts */}
               <section id="accounts" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     4. {t("termsSection4Title")}
                   </h2>
@@ -123,7 +123,7 @@ export default function TermsPage() {
 
               {/* Acceptable Use */}
               <section id="acceptable-use" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     5. {t("termsSection5Title")}
                   </h2>
@@ -144,7 +144,7 @@ export default function TermsPage() {
 
               {/* User Content */}
               <section id="user-content" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     6. {t("termsSection6Title")}
                   </h2>
@@ -158,7 +158,7 @@ export default function TermsPage() {
 
               {/* Payments & Billing */}
               <section id="payments" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     7. {t("termsSection7Title")}
                   </h2>
@@ -171,7 +171,7 @@ export default function TermsPage() {
 
               {/* Termination */}
               <section id="termination" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     8. {t("termsSection8Title")}
                   </h2>
@@ -191,7 +191,7 @@ export default function TermsPage() {
 
               {/* AI-Generated Outputs */}
               <section id="ai-outputs" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     9. {t("termsSection9Title")}
                   </h2>
@@ -204,7 +204,7 @@ export default function TermsPage() {
 
               {/* Warranties & Disclaimers */}
               <section id="warranties" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     10. {t("termsSection10Title")}
                   </h2>
@@ -217,7 +217,7 @@ export default function TermsPage() {
 
               {/* Limitation of Liability */}
               <section id="liability" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     11. {t("termsSection11Title")}
                   </h2>
@@ -233,7 +233,7 @@ export default function TermsPage() {
 
               {/* Indemnification */}
               <section id="indemnification" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     12. {t("termsSection12Title")}
                   </h2>
@@ -251,7 +251,7 @@ export default function TermsPage() {
 
               {/* Governing Law */}
               <section id="governing-law" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     13. {t("termsSection13Title")}
                   </h2>
@@ -263,7 +263,7 @@ export default function TermsPage() {
 
               {/* Changes to Terms */}
               <section id="changes" className="scroll-mt-24">
-                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div className="p-5 md:p-8 lg:p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900 dark:text-slate-100">
                     14. {t("termsSection14Title")}
                   </h2>
