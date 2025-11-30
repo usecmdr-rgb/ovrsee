@@ -22,6 +22,7 @@ import TrialExpiredLock from "./TrialExpiredLock";
 interface InsightTimelineProps {
   range: "daily" | "weekly" | "monthly";
   onInsightClick?: (insight: Insight) => void;
+  isPreview?: boolean;
 }
 
 const sourceIcons: Record<InsightSource, typeof Phone> = {
@@ -33,10 +34,53 @@ const sourceIcons: Record<InsightSource, typeof Phone> = {
   manual: FileText,
 };
 
-export default function InsightTimeline({ range, onInsightClick }: InsightTimelineProps) {
+// Mock insights for demo mode
+const mockInsights: Insight[] = [
+  {
+    id: "mock-1",
+    title: "Call volume increased 20% this week",
+    description: "Aloha handled 32 calls this week, up from 27 last week. Most calls were answered successfully.",
+    source: "aloha",
+    category: "performance",
+    severity: "important",
+    tags: ["calls", "trending"],
+    createdAt: new Date().toISOString(),
+    isRead: false,
+    actions: [],
+    metadata: {},
+  },
+  {
+    id: "mock-2",
+    title: "Two invoices require follow-up",
+    description: "Sync identified 2 unpaid invoices that need attention. Consider sending reminders.",
+    source: "sync",
+    category: "finance",
+    severity: "warnings",
+    tags: ["invoices", "follow-up"],
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    isRead: false,
+    actions: [],
+    metadata: {},
+  },
+  {
+    id: "mock-3",
+    title: "Media engagement up 15%",
+    description: "Studio's recent posts showed strong engagement. Keep this content strategy going.",
+    source: "studio",
+    category: "engagement",
+    severity: "important",
+    tags: ["media", "engagement"],
+    createdAt: new Date(Date.now() - 7200000).toISOString(),
+    isRead: false,
+    actions: [],
+    metadata: {},
+  },
+];
+
+export default function InsightTimeline({ range, onInsightClick, isPreview = false }: InsightTimelineProps) {
   const { isAuthenticated } = useAppState();
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState<Insight[]>(isPreview ? mockInsights : []);
+  const [loading, setLoading] = useState(!isPreview);
   const [error, setError] = useState<string | null>(null);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [filter, setFilter] = useState<"all" | "important" | "warnings" | "critical">("all");
@@ -44,6 +88,10 @@ export default function InsightTimeline({ range, onInsightClick }: InsightTimeli
   const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
 
   const fetchInsights = useCallback(async () => {
+    if (isPreview) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     setIsUnauthorized(false);
@@ -75,13 +123,17 @@ export default function InsightTimeline({ range, onInsightClick }: InsightTimeli
   }, [range, filter, sourceFilter]);
 
   useEffect(() => {
+    if (isPreview) {
+      setLoading(false);
+      return;
+    }
     if (!isAuthenticated) {
       setLoading(false);
       return;
     }
 
     fetchInsights();
-  }, [range, filter, sourceFilter, isAuthenticated, fetchInsights]);
+  }, [range, filter, sourceFilter, isAuthenticated, fetchInsights, isPreview]);
 
   const handleInsightClick = (insight: Insight) => {
     setSelectedInsight(insight);

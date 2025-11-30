@@ -75,7 +75,15 @@ export default function InsightPage() {
     if (isPreview) {
       return {
         ...emptyAgentStats,
-        beta_insights_count: 28, // Mock number for preview
+        alpha_calls_total: 156, // Mock calls for demo
+        alpha_calls_missed: 5, // Mock missed calls
+        alpha_appointments: 18, // Mock appointments
+        xi_important_emails: 42, // Mock important emails
+        xi_missed_emails: 3, // Mock missed emails
+        xi_payments_bills: 8, // Mock payments/bills
+        xi_invoices: 4, // Mock invoices
+        mu_media_edits: 87, // Mock media edits
+        beta_insights_count: 28, // Mock insights count
       };
     }
     // Use real stats (will be 0 if no activity since activation)
@@ -128,9 +136,9 @@ export default function InsightPage() {
       <section className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("insightLatestInsightCount")}</p>
-          {loading && <span className="text-xs text-slate-500">{t("loadingStats")}</span>}
-          {error && <span className="text-xs text-red-500">{t("couldntLoadStats")}</span>}
-          {noStats && <span className="text-xs text-slate-500">{t("noStatsYet")}</span>}
+          {!isPreview && loading && <span className="text-xs text-slate-500">{t("loadingStats")}</span>}
+          {!isPreview && error && <span className="text-xs text-red-500">{t("couldntLoadStats")}</span>}
+          {!isPreview && noStats && <span className="text-xs text-slate-500">{t("noStatsYet")}</span>}
         </div>
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 p-4 text-center dark:border-slate-800 dark:bg-slate-900/60">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightInsightsGenerated")}</p>
@@ -161,8 +169,8 @@ export default function InsightPage() {
         </div>
       </section>
       <section className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
-        <InsightTimeline range={timeframe} />
-        <ActivityMixChart range={timeframe} />
+        <InsightTimeline range={timeframe} isPreview={isPreview} />
+        <ActivityMixChart range={timeframe} isPreview={isPreview} />
       </section>
 
       {/* Insight Intelligence Features - Disabled in preview mode */}

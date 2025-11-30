@@ -886,9 +886,9 @@ const SyncPage = () => {
             <section className="rounded-3xl border border-slate-200 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-900/40">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("syncLatestInboxMetrics")}</p>
-                {loading && <span className="text-xs text-slate-500">Loading stats…</span>}
-                {error && <span className="text-xs text-red-500">Couldn&apos;t load stats</span>}
-                {noStats && <span className="text-xs text-slate-500">No stats yet</span>}
+                {!isPreview && loading && <span className="text-xs text-slate-500">Loading stats…</span>}
+                {!isPreview && error && <span className="text-xs text-red-500">Couldn&apos;t load stats</span>}
+                {!isPreview && noStats && <span className="text-xs text-slate-500">No stats yet</span>}
               </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[

@@ -114,15 +114,15 @@ function TeamPricingContent() {
       {/* Header */}
       <div className="text-center mb-10 space-y-3">
         <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-          Team Pricing
+          {t("teamPricingTitle")}
         </h1>
         <p className="text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-          Configure your team plan by adding users and selecting their tiers. Discounts are automatically applied based on total seats.
+          {t("teamPricingDescription")}
         </p>
         {pricing.totalSeats > 0 && (
           <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
             <span className="text-sm font-medium">
-              {pricing.totalSeats} {pricing.totalSeats === 1 ? "User" : "Users"} Configured
+              {pricing.totalSeats} {pricing.totalSeats === 1 ? t("teamPricingUserConfigured") : t("teamPricingUsersConfigured")}
             </span>
           </div>
         )}
@@ -133,9 +133,9 @@ function TeamPricingContent() {
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Configure Seats</CardTitle>
+              <CardTitle>{t("teamPricingConfigureSeats")}</CardTitle>
               <p className="text-sm text-muted-foreground mt-2">
-                Each user is billed based on their tier. Your total is the sum of all users, minus any team discount for having 5+ seats.
+                {t("teamPricingSeatsDescription")}
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -147,7 +147,7 @@ function TeamPricingContent() {
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium text-muted-foreground">
-                      User {index + 1}
+                      {t("teamPricingUser")} {index + 1}
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">
                       {TIERS[seat.tier].name}
@@ -157,11 +157,11 @@ function TeamPricingContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-muted-foreground mb-1 block">
-                        Name
+                        {t("teamPricingName")}
                       </label>
                       <input
                         type="text"
-                        placeholder="Enter name"
+                        placeholder={t("teamPricingNamePlaceholder")}
                         value={seat.name || ""}
                         onChange={(e) => updateSeatName(seat.id, e.target.value)}
                         className="w-full px-3 py-2 text-sm border rounded-md bg-background"
@@ -170,11 +170,11 @@ function TeamPricingContent() {
                     <div>
                       <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
                         <Mail className="h-3 w-3" />
-                        Email
+                        {t("teamPricingEmail")}
                       </label>
                       <input
                         type="email"
-                        placeholder="user@example.com"
+                        placeholder={t("teamPricingEmailPlaceholder")}
                         value={seat.email || ""}
                         onChange={(e) => updateSeatEmail(seat.id, e.target.value)}
                         className="w-full px-3 py-2 text-sm border rounded-md bg-background"
@@ -185,7 +185,7 @@ function TeamPricingContent() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <label className="text-xs text-muted-foreground mb-1 block">
-                        Tier
+                        {t("teamPricingTier")}
                       </label>
                       <select
                         value={seat.tier}
@@ -228,7 +228,7 @@ function TeamPricingContent() {
                 className="w-full"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add User
+                {t("teamPricingAddUser")}
               </Button>
               
               {/* Email Invitations Section */}
@@ -238,17 +238,17 @@ function TeamPricingContent() {
                     <Mail className="h-5 w-5 text-primary mt-0.5" />
                     <div className="flex-1">
                       <h3 className="text-sm font-semibold mb-1">
-                        Email Invitations
+                        {t("teamPricingEmailInvitations")}
                       </h3>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Users with email addresses will receive an invitation to sign up and get direct access to their assigned tier.
+                        {t("teamPricingEmailInvitationsDescription")}
                       </p>
                       <div className="text-xs text-muted-foreground mb-3">
-                        <p className="font-medium mb-1">Ready to send invitations:</p>
+                        <p className="font-medium mb-1">{t("teamPricingReadyToSend")}</p>
                         <ul className="list-disc list-inside space-y-1">
                           {seats.filter(seat => seat.email).map((seat, idx) => (
                             <li key={seat.id}>
-                              {seat.name || `User ${idx + 1}`} ({seat.email}) - {TIERS[seat.tier].name}
+                              {seat.name || `${t("teamPricingUser")} ${idx + 1}`} ({seat.email}) - {TIERS[seat.tier].name}
                             </li>
                           ))}
                         </ul>
@@ -263,10 +263,10 @@ function TeamPricingContent() {
                         className="w-full"
                       >
                         <Mail className="h-4 w-4 mr-2" />
-                        Send Invitations ({seats.filter(s => s.email).length})
+                        {t("teamPricingSendInvitations")} ({seats.filter(s => s.email).length})
                       </Button>
                       <p className="text-xs text-muted-foreground mt-2 text-center">
-                        Note: Email invitations are processed by our support team. You&apos;ll receive a confirmation once invitations are sent.
+                        {t("teamPricingInvitationsNote")}
                       </p>
                     </div>
                   </div>
@@ -280,13 +280,13 @@ function TeamPricingContent() {
         <div className="lg:col-span-1">
           <Card className="sticky top-4">
             <CardHeader>
-              <CardTitle>Team Summary</CardTitle>
+              <CardTitle>{t("teamPricingTeamSummary")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Total Seats */}
               <div>
                 <div className="text-sm text-muted-foreground">
-                  Total Seats
+                  {t("teamPricingTotalSeats")}
                 </div>
                 <div className="text-2xl font-semibold">
                   {pricing.totalSeats}
@@ -297,7 +297,7 @@ function TeamPricingContent() {
               {pricing.totalSeats > 0 && (
                 <div className="space-y-2 pt-2 border-t">
                   <div className="text-sm font-medium">
-                    Breakdown by Tier
+                    {t("teamPricingBreakdownByTier")}
                   </div>
                   {Object.entries(pricing.perTier).map(([tierId, tierData]) => {
                     if (tierData.count === 0) return null;
@@ -323,7 +323,7 @@ function TeamPricingContent() {
                 <div className="space-y-3 pt-4 border-t">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">
-                      List Price
+                      {t("teamPricingListPrice")}
                     </span>
                     <span>{formatPrice(pricing.listSubtotal, language)}</span>
                   </div>
@@ -332,7 +332,7 @@ function TeamPricingContent() {
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
-                          Team Discount
+                          {t("teamPricingTeamDiscount")}
                         </span>
                         <span className="text-emerald-600 dark:text-emerald-400">
                           {getTeamDiscountPercent(pricing.totalSeats) * 100}%
@@ -340,7 +340,7 @@ function TeamPricingContent() {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
-                          Discount
+                          {t("teamPricingDiscount")}
                         </span>
                         <span className="text-emerald-600 dark:text-emerald-400">
                           -{formatPrice(pricing.discountAmount, language)}
@@ -350,11 +350,11 @@ function TeamPricingContent() {
                   )}
 
                   <div className="flex justify-between pt-2 border-t font-semibold text-lg">
-                    <span>Total</span>
+                    <span>{t("teamPricingTotal")}</span>
                     <span>{formatPrice(pricing.finalTotal, language)}</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    per month
+                    {t("teamPricingPerMonth")}
                   </div>
                 </div>
               )}
@@ -363,7 +363,7 @@ function TeamPricingContent() {
               {pricing.totalSeats > 0 && pricing.discountPercent === 0 && (
                 <div className="pt-2 border-t">
                   <p className="text-xs text-muted-foreground">
-                    Add 5+ seats to unlock team discounts (10% for 5-9, 20% for 10-19, 25% for 20+)
+                    {t("teamPricingDiscountInfo")}
                   </p>
                 </div>
               )}
@@ -371,7 +371,7 @@ function TeamPricingContent() {
               {/* Empty State */}
               {pricing.totalSeats === 0 && (
                 <div className="text-sm text-muted-foreground text-center py-4">
-                  Add seats to see pricing breakdown
+                  {t("teamPricingAddSeatsToSee")}
                 </div>
               )}
             </CardContent>
@@ -388,7 +388,7 @@ export default function TeamPricingPage() {
       <div className="w-full max-w-6xl mx-auto px-4 py-16">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-900"></div>
-          <p className="mt-4 text-sm text-slate-500">Loading team pricing...</p>
+          <p className="mt-4 text-sm text-slate-500">{t("teamPricingLoading")}</p>
         </div>
       </div>
     }>

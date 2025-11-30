@@ -232,9 +232,9 @@ export default function AlohaPage() {
           <section className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("latestStats")}</p>
-              {loading && <p className="text-xs text-slate-500">{t("loadingStats")}</p>}
-              {error && <p className="text-xs text-red-500">{t("couldntLoadStats")}</p>}
-              {noStats && <p className="text-xs text-slate-500">{t("noStatsYet")}</p>}
+              {!isPreview && loading && <p className="text-xs text-slate-500">{t("loadingStats")}</p>}
+              {!isPreview && error && <p className="text-xs text-red-500">{t("couldntLoadStats")}</p>}
+              {!isPreview && noStats && <p className="text-xs text-slate-500">{t("noStatsYet")}</p>}
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[

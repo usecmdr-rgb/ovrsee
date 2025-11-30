@@ -12,7 +12,6 @@ import { useAgentAccess } from "@/hooks/useAgentAccess";
 import { useAccountMode } from "@/hooks/useAccountMode";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import TrialExpiredBanner from "@/components/agent/TrialExpiredBanner";
-import { TestOpenAIButton } from "@/components/app/TestOpenAIButton";
 import type { AgentKey } from "@/types";
 import { formatMoney as formatCurrency } from "@/lib/currency";
 import CommandSummaryCard from "@/components/dashboard/CommandSummaryCard";

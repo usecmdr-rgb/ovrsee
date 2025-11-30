@@ -6,15 +6,54 @@ import TrialExpiredLock from "./TrialExpiredLock";
 
 interface ActivityMixChartProps {
   range: TimeRange;
+  isPreview?: boolean;
 }
 
-export default function ActivityMixChart({ range }: ActivityMixChartProps) {
-  const [data, setData] = useState<ActivityMixResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+// Mock data for demo mode
+const getMockActivityData = (range: TimeRange): ActivityMixResponse => {
+  if (range === "daily") {
+    return {
+      range: "daily",
+      buckets: Array.from({ length: 24 }, (_, i) => ({
+        label: `${i.toString().padStart(2, "0")}:00`,
+        calls: Math.floor(Math.random() * 5) + 2,
+        emails: Math.floor(Math.random() * 3) + 1,
+      })),
+    };
+  } else if (range === "weekly") {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return {
+      range: "weekly",
+      buckets: days.map((day) => ({
+        label: day,
+        calls: Math.floor(Math.random() * 15) + 10,
+        emails: Math.floor(Math.random() * 10) + 5,
+      })),
+    };
+  } else {
+    return {
+      range: "monthly",
+      buckets: Array.from({ length: 4 }, (_, i) => ({
+        label: `W${i + 1}`,
+        calls: Math.floor(Math.random() * 50) + 30,
+        emails: Math.floor(Math.random() * 30) + 15,
+      })),
+    };
+  }
+};
+
+export default function ActivityMixChart({ range, isPreview = false }: ActivityMixChartProps) {
+  const [data, setData] = useState<ActivityMixResponse | null>(isPreview ? getMockActivityData(range) : null);
+  const [loading, setLoading] = useState(!isPreview);
   const [error, setError] = useState<string | null>(null);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (isPreview) {
+      setData(getMockActivityData(range));
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     setIsUnauthorized(false);
@@ -40,8 +79,14 @@ export default function ActivityMixChart({ range }: ActivityMixChartProps) {
   }, [range]);
 
   useEffect(() => {
+    if (isPreview) {
+      setData(getMockActivityData(range));
+      setLoading(false);
+      setError(null);
+      return;
+    }
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, range, isPreview]);
 
   if (loading) {
     return (

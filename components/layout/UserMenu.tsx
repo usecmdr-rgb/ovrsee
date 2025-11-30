@@ -35,7 +35,7 @@ const UserMenu = () => {
 
   const handleItemClick = (item: DropdownItem) => {
     if ("href" in item) {
-      router.push(item.href);
+      router.push(item.href as any);
       setOpen(false);
       return;
     }

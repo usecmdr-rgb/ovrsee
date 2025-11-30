@@ -193,18 +193,20 @@ export default function PricingTable() {
   };
 
   return (
-    <Card className="w-full h-full flex flex-col">
-      <CardContent className="flex-1 flex flex-col">
+    <Card className="w-full h-full flex flex-col overflow-hidden">
+      <CardContent className="flex-1 flex flex-col min-h-0">
         {/* Monthly Plan Title */}
-        <div className="text-left mb-4">
+        <div className="text-left mb-4 flex-shrink-0">
           <h2 className="text-lg font-semibold font-sans flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Monthly Plan
           </h2>
         </div>
         {/* TABLE */}
-        <div className="w-full">
-        <table className="w-full border-separate border-spacing-0 text-xs bg-background">
+        <div className="w-full flex-1 min-h-0 overflow-hidden">
+          <div className="w-full h-full overflow-x-auto overflow-y-auto">
+            <div className="min-w-full inline-block scale-[0.8] sm:scale-90 md:scale-100 origin-top-left">
+              <table className="w-full border-separate border-spacing-0 text-xs bg-background min-w-[600px] md:min-w-0">
           <thead>
             <tr>
               {/* Empty top-left corner cell */}
@@ -316,10 +318,12 @@ export default function PricingTable() {
             })}
           </tbody>
         </table>
+            </div>
+          </div>
         </div>
 
         {/* Free Trial Button */}
-        <div className="mt-6 flex flex-col items-center gap-3">
+        <div className="mt-6 flex flex-col items-center gap-3 flex-shrink-0">
         {trialStarted ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-4 text-center dark:border-emerald-800 dark:bg-emerald-900/20">
             <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">

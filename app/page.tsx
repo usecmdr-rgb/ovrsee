@@ -66,10 +66,10 @@ export default function HomePage() {
           {t("multiAgentCockpit")}
         </p>
         <h1 className="mt-3 sm:mt-4 text-2xl sm:text-3xl font-semibold leading-tight">
-          Delegate calls, inbox, content, and insights to your team of four AI agents.
+          {t("delegateTitle")}
         </h1>
         <p className="mt-3 sm:mt-4 text-base sm:text-lg text-slate-600 dark:text-slate-300">
-          OVRSEE gives small to large teams a unified cockpit where Aloha, Sync, Studio, and Insight work together from one shared memory to save time, automate busywork, and keep workflows running smoothly.
+          {t("delegateDescription")}
         </p>
         <div className="mt-4 sm:mt-6 flex flex-wrap gap-3">
           <a
@@ -91,7 +91,7 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xs uppercase tracking-widest text-slate-500">{t("dailyAgentStats")}</h2>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Live activity from today</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{t("liveActivityFromToday")}</p>
           </div>
         </div>
         <div className="mt-4 sm:mt-6 grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-4 items-start" role="list">
@@ -103,7 +103,7 @@ export default function HomePage() {
               </div>
             )}
             <div className="flex items-center justify-center gap-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Aloha / Voice</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{t("alohaVoiceLabel")}</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -111,7 +111,7 @@ export default function HomePage() {
                 { label: t("calls"), value: fakeStats.aloha.calls },
                 { label: t("missed"), value: fakeStats.aloha.missed, alert: fakeStats.aloha.missed > 0 },
                 { label: t("appts"), value: fakeStats.aloha.appointments },
-                { label: "Alerts", value: fakeStats.aloha.alerts, alert: fakeStats.aloha.alerts > 0 },
+                { label: t("alertsLabel"), value: fakeStats.aloha.alerts, alert: fakeStats.aloha.alerts > 0 },
               ].map((item) => (
                 <div key={item.label} className="relative text-center flex flex-col items-center justify-center min-w-[60px]">
                   <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">{item.label}</p>
@@ -134,7 +134,7 @@ export default function HomePage() {
               </div>
             )}
             <div className="flex items-center justify-center gap-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Sync / Inbox</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{t("syncInboxLabel")}</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -167,15 +167,15 @@ export default function HomePage() {
               </div>
             )}
             <div className="flex items-center justify-center gap-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Studio / Media</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{t("studioMediaLabel")}</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {[
-                { label: "Impressions", value: fakeStats.studio.impressions.toLocaleString() },
-                { label: "Likes", value: fakeStats.studio.likes },
-                { label: "Reports", value: fakeStats.studio.reports, alert: true },
-                { label: "Today", value: "+1.2K" },
+                { label: t("impressions"), value: fakeStats.studio.impressions.toLocaleString() },
+                { label: t("likes"), value: fakeStats.studio.likes },
+                { label: t("reports"), value: fakeStats.studio.reports, alert: true },
+                { label: t("todayStatsLabel"), value: "+1.2K" },
               ].map((item) => (
                 <div key={item.label} className="relative text-center flex flex-col items-center justify-center min-w-[60px]">
                   <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">{item.label}</p>
@@ -198,15 +198,15 @@ export default function HomePage() {
               </div>
             )}
             <div className="flex items-center justify-center gap-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">Insight / Data</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 text-center">{t("insightDataLabel")}</p>
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" aria-label="Active"></span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {[
-                { label: "Total", value: fakeStats.insight.insights },
-                { label: "New Today", value: 3, alert: true },
-                { label: "This Week", value: 12 },
-                { label: "Trending", value: 5 },
+                { label: t("totalLabel"), value: fakeStats.insight.insights },
+                { label: t("newToday"), value: 3, alert: true },
+                { label: t("thisWeekStats"), value: 12 },
+                { label: t("trending"), value: 5 },
               ].map((item) => (
                 <div key={item.label} className="relative text-center flex flex-col items-center justify-center min-w-[60px]">
                   <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 text-center break-words leading-tight px-1">{item.label}</p>

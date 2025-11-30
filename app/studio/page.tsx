@@ -888,9 +888,9 @@ function MuShareModal({ isOpen, onClose, assetUrl, assetName, previewFilter, pre
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-            {/* Left: Preview */}
+            {/* Left: Demo */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Preview</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Demo</h3>
               {assetUrl ? (
                 <div 
                   className="share-preview-container rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900 flex items-center justify-center relative"
@@ -899,7 +899,7 @@ function MuShareModal({ isOpen, onClose, assetUrl, assetName, previewFilter, pre
                   <img
                     key={`${assetUrl}-${Date.now()}`}
                     src={assetUrl}
-                    alt="Share preview"
+                    alt="Share demo"
                     className="h-full w-full object-contain"
                     style={{
                       ...(previewFilter && { filter: previewFilter }),
@@ -911,7 +911,7 @@ function MuShareModal({ isOpen, onClose, assetUrl, assetName, previewFilter, pre
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-slate-500">
-                  No preview available
+                  No demo available
                 </div>
               )}
               {assetName && (
@@ -2230,7 +2230,7 @@ export default function StudioPage() {
     if (isPreview) {
       setMuMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "File upload is disabled in preview mode. Upgrade to Advanced or Elite tier to unlock full Studio agent features." },
+        { role: "assistant", content: "File upload is disabled in demo mode. Upgrade to Advanced or Elite tier to unlock full Studio agent features." },
       ]);
       event.target.value = "";
       return;
@@ -3060,7 +3060,7 @@ export default function StudioPage() {
           {activeAsset && (
             <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 transition-all duration-500 ease-in-out">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Live Preview</h3>
+                <h3 className="text-lg font-semibold">Live Demo</h3>
                 <div className="flex items-center gap-2">
                   {activeAsset.type === "image" && (
                     <button

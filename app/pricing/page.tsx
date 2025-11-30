@@ -3,7 +3,7 @@ import PricingTable from "@/components/pricing/PricingTable";
 import PlanAdvisor from "@/components/pricing/PlanAdvisor";
 
 export const metadata: Metadata = {
-  title: "Pricing | OVRSEE",
+  title: "Pricing",
   description: "Choose your OVRSEE tier: Basic ($39.99/mo), Advanced ($99.99/mo), or Elite ($159.99/mo). Start your 3-day free trial today.",
 };
 
@@ -13,7 +13,7 @@ export default function PricingPage() {
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl md:text-4xl font-semibold tracking-tight font-sans mb-2">
-          OVRSEE Tiers and Pricing
+          Pricing
         </h1>
       </div>
       
