@@ -38,39 +38,45 @@ const sourceIcons: Record<InsightSource, typeof Phone> = {
 const mockInsights: Insight[] = [
   {
     id: "mock-1",
+    userId: "demo-user",
     title: "Call volume increased 20% this week",
     description: "Aloha handled 32 calls this week, up from 27 last week. Most calls were answered successfully.",
     source: "aloha",
-    category: "performance",
-    severity: "important",
+    category: "productivity",
+    severity: "info",
     tags: ["calls", "trending"],
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     isRead: false,
     actions: [],
     metadata: {},
   },
   {
     id: "mock-2",
+    userId: "demo-user",
     title: "Two invoices require follow-up",
     description: "Sync identified 2 unpaid invoices that need attention. Consider sending reminders.",
     source: "sync",
     category: "finance",
-    severity: "warnings",
+    severity: "warning",
     tags: ["invoices", "follow-up"],
     createdAt: new Date(Date.now() - 3600000).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000).toISOString(),
     isRead: false,
     actions: [],
     metadata: {},
   },
   {
     id: "mock-3",
+    userId: "demo-user",
     title: "Media engagement up 15%",
     description: "Studio's recent posts showed strong engagement. Keep this content strategy going.",
     source: "studio",
-    category: "engagement",
-    severity: "important",
+    category: "sales",
+    severity: "info",
     tags: ["media", "engagement"],
     createdAt: new Date(Date.now() - 7200000).toISOString(),
+    updatedAt: new Date(Date.now() - 7200000).toISOString(),
     isRead: false,
     actions: [],
     metadata: {},
@@ -120,7 +126,7 @@ export default function InsightTimeline({ range, onInsightClick, isPreview = fal
     } finally {
       setLoading(false);
     }
-  }, [range, filter, sourceFilter]);
+  }, [range, filter, sourceFilter, isPreview]);
 
   useEffect(() => {
     if (isPreview) {

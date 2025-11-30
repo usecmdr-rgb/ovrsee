@@ -76,7 +76,7 @@ export default function ActivityMixChart({ range, isPreview = false }: ActivityM
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, isPreview]);
 
   useEffect(() => {
     if (isPreview) {

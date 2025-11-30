@@ -382,16 +382,21 @@ function TeamPricingContent() {
   );
 }
 
+function TeamPricingLoading() {
+  const t = useTranslation();
+  return (
+    <div className="w-full max-w-6xl mx-auto px-4 py-16">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-900"></div>
+        <p className="mt-4 text-sm text-slate-500">{t("teamPricingLoading")}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function TeamPricingPage() {
   return (
-    <Suspense fallback={
-      <div className="w-full max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-900"></div>
-          <p className="mt-4 text-sm text-slate-500">{t("teamPricingLoading")}</p>
-        </div>
-      </div>
-    }>
+    <Suspense fallback={<TeamPricingLoading />}>
       <TeamPricingContent />
     </Suspense>
   );
