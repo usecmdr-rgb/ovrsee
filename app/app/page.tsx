@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, memo } from "react";
+import { useMemo, useState, useEffect, useCallback, memo, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Clock, DollarSign } from "lucide-react";
@@ -216,15 +216,9 @@ const TimeframeSelector = memo(({
 
 TimeframeSelector.displayName = "TimeframeSelector";
 
-export default function DashboardPage() {
-  const [timeframe, setTimeframe] = useState<keyof typeof dataByTimeframe>("today");
-  const pathname = usePathname();
+// OAuth callback handler component that uses useSearchParams
+function OAuthCallbackHandler({ login, isAuthenticated }: { login: () => void; isAuthenticated: boolean }) {
   const searchParams = useSearchParams();
-  const { businessInfo, language, isAuthenticated, login } = useAppState();
-  const t = useTranslation();
-  const { accessibleAgents, isLoading: accessLoading } = useAgentAccess();
-  const { stats: agentStats, loading: statsLoading } = useAgentStats();
-  const { mode: accountMode, loading: accountModeLoading } = useAccountMode();
   
   // Handle OAuth callback - refresh session when landing on /app after OAuth
   useEffect(() => {
@@ -287,6 +281,18 @@ export default function DashboardPage() {
     
     handleOAuthCallback();
   }, [searchParams, login, isAuthenticated]);
+  
+  return null;
+}
+
+export default function DashboardPage() {
+  const [timeframe, setTimeframe] = useState<keyof typeof dataByTimeframe>("today");
+  const pathname = usePathname();
+  const { businessInfo, language, isAuthenticated, login } = useAppState();
+  const t = useTranslation();
+  const { accessibleAgents, isLoading: accessLoading } = useAgentAccess();
+  const { stats: agentStats, loading: statsLoading } = useAgentStats();
+  const { mode: accountMode, loading: accountModeLoading } = useAccountMode();
   
   // Reset timeframe to "today" when navigating to dashboard to ensure consistent UI
   useEffect(() => {
@@ -487,6 +493,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 sm:space-y-8">
+      <Suspense fallback={null}>
+        <OAuthCallbackHandler login={login} isAuthenticated={isAuthenticated} />
+      </Suspense>
       {isTrialExpired && (
         <TrialExpiredBanner />
       )}

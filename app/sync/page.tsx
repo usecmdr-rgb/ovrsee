@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, FormEvent, useEffect } from "react";
+import { useMemo, useState, FormEvent, useEffect, useCallback } from "react";
 import { mockEmails } from "@/lib/data";
 import { useAppState } from "@/context/AppStateContext";
 import type { EmailRecord } from "@/types";
@@ -389,9 +389,11 @@ const SyncPage = () => {
   }, [showDemoCalendar, demoCustomAlerts, demoAlertsState.length]);
 
   // Combine user custom alerts with demo alerts (use state if available, otherwise use memoized)
-  const allCustomAlerts = showDemoCalendar 
-    ? [...(demoAlertsState.length > 0 ? demoAlertsState : demoCustomAlerts), ...customAlerts]
-    : customAlerts;
+  const allCustomAlerts = useMemo(() => {
+    return showDemoCalendar 
+      ? [...(demoAlertsState.length > 0 ? demoAlertsState : demoCustomAlerts), ...customAlerts]
+      : customAlerts;
+  }, [showDemoCalendar, demoAlertsState, demoCustomAlerts, customAlerts]);
 
   const { hasAccess, isLoading: accessLoading } = useAgentAccess("sync");
   const { stats, loading, error } = useAgentStats();
@@ -510,12 +512,89 @@ const SyncPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Calendar functions - defined before useEffects that use them
+  const loadCalendarEvents = useCallback(async () => {
+    try {
+      setIsLoadingEvents(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      const startDate = new Date(selectedDate);
+      startDate.setDate(1);
+      const endDate = new Date(selectedDate);
+      endDate.setMonth(endDate.getMonth() + 1);
+      endDate.setDate(0);
+
+      const res = await fetch(
+        `/api/calendar/events?start=${startDate.toISOString()}&end=${endDate.toISOString()}`,
+        {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }
+      );
+
+      // Check if user logged in with Google OAuth provider
+      const { data: { session: checkSession } } = await supabaseBrowserClient.auth.getSession();
+      const isGoogleUser = checkSession?.user?.app_metadata?.provider === "google" || 
+                          checkSession?.user?.identities?.some((identity: any) => identity.provider === "google");
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          // Only set to false if not a Google user (Google users stay "connected" in UI)
+          if (!isGoogleUser) {
+            setIsCalendarConnected(false);
+          }
+          return;
+        }
+        throw new Error("Failed to fetch events");
+      }
+
+      const data = await res.json();
+      if (data.ok && data.events) {
+        setEvents(data.events);
+      }
+    } catch (error) {
+      console.error("Error loading calendar events:", error);
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, [selectedDate]);
+
+  const checkCalendarConnection = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      // Check if user logged in with Google OAuth provider
+      const isGoogleUser = session.user?.app_metadata?.provider === "google" || 
+                          session.user?.identities?.some((identity: any) => identity.provider === "google");
+
+      // If user logged in with Google, consider Calendar connected
+      if (isGoogleUser) {
+        setIsCalendarConnected(true);
+        loadCalendarEvents();
+        return;
+      }
+
+      // Otherwise, check for Calendar connection in database
+      const res = await fetch("/api/calendar/events?check=true", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (res.ok) {
+        setIsCalendarConnected(true);
+        loadCalendarEvents();
+      }
+    } catch (error) {
+      console.error("Error checking calendar connection:", error);
+    }
+  }, [loadCalendarEvents]);
+
   // Calendar connection and loading
   useEffect(() => {
     if (activeTab === "calendar") {
       checkCalendarConnection();
     }
-  }, [activeTab]);
+  }, [activeTab, checkCalendarConnection]);
 
   useEffect(() => {
     if (isCalendarConnected && activeTab === "calendar") {
@@ -773,36 +852,6 @@ const SyncPage = () => {
     }
   };
 
-  // Calendar functions
-  const checkCalendarConnection = async () => {
-    try {
-      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-      if (!session?.access_token) return;
-
-      // Check if user logged in with Google OAuth provider
-      const isGoogleUser = session.user?.app_metadata?.provider === "google" || 
-                          session.user?.identities?.some((identity: any) => identity.provider === "google");
-
-      // If user logged in with Google, consider Calendar connected
-      if (isGoogleUser) {
-        setIsCalendarConnected(true);
-        loadCalendarEvents();
-        return;
-      }
-
-      // Otherwise, check for Calendar connection in database
-      const res = await fetch("/api/calendar/events?check=true", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      if (res.ok) {
-        setIsCalendarConnected(true);
-        loadCalendarEvents();
-      }
-    } catch (error) {
-      console.error("Error checking calendar connection:", error);
-    }
-  };
 
   const handleConnectCalendar = async () => {
     // Check if user is authenticated via app state
@@ -838,52 +887,6 @@ const SyncPage = () => {
       console.error("Error connecting calendar:", error);
       alert("Failed to connect Google Calendar. Please try again.");
       setIsConnectingCalendar(false);
-    }
-  };
-
-  const loadCalendarEvents = async () => {
-    try {
-      setIsLoadingEvents(true);
-      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-      if (!session?.access_token) return;
-
-      const startDate = new Date(selectedDate);
-      startDate.setDate(1);
-      const endDate = new Date(selectedDate);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
-
-      const res = await fetch(
-        `/api/calendar/events?start=${startDate.toISOString()}&end=${endDate.toISOString()}`,
-        {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }
-      );
-
-      // Check if user logged in with Google OAuth provider
-      const { data: { session: checkSession } } = await supabaseBrowserClient.auth.getSession();
-      const isGoogleUser = checkSession?.user?.app_metadata?.provider === "google" || 
-                          checkSession?.user?.identities?.some((identity: any) => identity.provider === "google");
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          // Only set to false if not a Google user (Google users stay "connected" in UI)
-          if (!isGoogleUser) {
-            setIsCalendarConnected(false);
-          }
-          return;
-        }
-        throw new Error("Failed to fetch events");
-      }
-
-      const data = await res.json();
-      if (data.ok && data.events) {
-        setEvents(data.events);
-      }
-    } catch (error) {
-      console.error("Error loading calendar events:", error);
-    } finally {
-      setIsLoadingEvents(false);
     }
   };
 
