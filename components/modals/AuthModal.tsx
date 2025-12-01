@@ -34,11 +34,18 @@ const AuthModal = () => {
       errorMessage.includes("api key") ||
       errorMessage.includes("configuration") ||
       errorMessage.includes("missing required") ||
-      errorMessage.includes("environment variable")
+      errorMessage.includes("environment variable") ||
+      errorMessage.includes("failed to fetch") ||
+      errorMessage.includes("network error") ||
+      errorMessage.includes("connection") ||
+      errorCode === "ECONNREFUSED" ||
+      errorCode === "ENOTFOUND"
     ) {
+      // Log the actual error for debugging
+      console.error("[Auth] Configuration/Connection error:", error);
       return mode === "login" 
-        ? "Unable to connect to authentication service. Please try again later."
-        : "Unable to create account. Please try again later.";
+        ? "Unable to connect to authentication service. Please check your connection and try again."
+        : "Unable to create account. Please check your connection and try again.";
     }
 
     // Check for authentication errors - wrong email or password
@@ -153,13 +160,26 @@ const AuthModal = () => {
         }
       } else {
         // Login: create Supabase session in the browser
-        const { error: supabaseError } = await supabaseBrowserClient.auth.signInWithPassword({
+        const { data: signInData, error: supabaseError } = await supabaseBrowserClient.auth.signInWithPassword({
           email,
           password,
         });
+        
         if (supabaseError) {
+          // Log detailed error for debugging
+          console.error("[Auth] Login error:", {
+            message: supabaseError.message,
+            status: supabaseError.status,
+            code: supabaseError.code,
+            name: supabaseError.name,
+          });
           const errorMsg = getErrorMessage(supabaseError, "login");
           throw new Error(errorMsg);
+        }
+        
+        if (!signInData.session) {
+          console.error("[Auth] Login succeeded but no session returned");
+          throw new Error("Login succeeded but session was not created. Please try again.");
         }
       }
 
@@ -199,19 +219,26 @@ const AuthModal = () => {
     setError(null);
 
     try {
-      // Force localhost:3000 for development, prevent redirects to production
+      // Use environment-based redirect URL
+      // Priority: NEXT_PUBLIC_APP_URL > current origin > localhost:3000
       const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
       let redirectUrl: string;
       
-      if (isLocalhost) {
-        // Always use localhost:3000 for development, regardless of current port
+      // Check environment variable first
+      if (process.env.NEXT_PUBLIC_APP_URL) {
+        redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/app`;
+      } else if (isLocalhost) {
+        // Development: always use localhost:3000
         redirectUrl = `http://localhost:3000/app`;
       } else {
         // Production: use current origin
         redirectUrl = `${window.location.origin}/app`;
       }
       
+      console.log("[OAuth] Initiating Google sign-in");
+      console.log("[OAuth] Current origin:", window.location.origin);
       console.log("[OAuth] Redirect URL:", redirectUrl);
+      console.log("[OAuth] Is localhost:", isLocalhost);
       
       const { data, error: oauthError } = await supabaseBrowserClient.auth.signInWithOAuth({
         provider: "google",
