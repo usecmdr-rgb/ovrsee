@@ -1,0 +1,26 @@
+Twilio Domain Verification - DNS Method
+========================================
+
+Your verification token: 70f961eb52238e5b9279bcb7a4af9475
+
+DNS TXT Record to Add:
+----------------------
+Type: TXT
+Name: _twilio
+Value: 70f961eb52238e5b9279bcb7a4af9475
+TTL: 3600
+
+Quick Steps:
+------------
+1. Go to your domain registrar's DNS management
+2. Add a TXT record with name "_twilio" and value above
+3. Save the record
+4. Go to Twilio Console > Admin > Domains
+5. Click "Verify Domain"
+6. Wait for DNS propagation (can take a few minutes to 72 hours)
+
+Check DNS Propagation:
+----------------------
+dig _twilio.yourdomain.com TXT
+
+Or use: https://dnschecker.org
