@@ -35,21 +35,95 @@ export async function middleware(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
+            
+            // Determine if we're on localhost or production
+            const isLocalhost = request.nextUrl.hostname === 'localhost' || 
+                               request.nextUrl.hostname === '127.0.0.1';
+            const isHttps = request.nextUrl.protocol === 'https:';
+            const hostname = request.nextUrl.hostname;
+            
+            // Configure cookie options based on environment
+            const cookieOptions: any = {
+              ...options,
+              path: options?.path || '/',
+              // Secure: true for HTTPS (production), false for HTTP (localhost)
+              secure: isHttps,
+              // SameSite: 'lax' for same-site OAuth, 'none' for cross-site (requires secure)
+              // Use 'lax' for most cases, 'none' only if needed for cross-site OAuth
+              sameSite: options?.sameSite || (isHttps ? 'lax' : 'lax'),
+              // HttpOnly: preserve if set, otherwise let Supabase SSR handle it
+              httpOnly: options?.httpOnly !== undefined ? options.httpOnly : undefined,
+            };
+            
+            // Domain configuration for production
+            if (!isLocalhost && isHttps) {
+              // For production, set domain to work across subdomains
+              // Extract root domain (e.g., 'ovrsee.ai' from 'www.ovrsee.ai' or 'ovrsee.ai')
+              const domainParts = hostname.split('.');
+              if (domainParts.length >= 2) {
+                // Get the last two parts (e.g., 'ovrsee.ai')
+                const rootDomain = domainParts.slice(-2).join('.');
+                // Set domain with leading dot to work across subdomains
+                cookieOptions.domain = `.${rootDomain}`;
+              } else {
+                // Fallback: use hostname as-is
+                cookieOptions.domain = hostname;
+              }
+            } else if (isLocalhost) {
+              // For localhost, explicitly don't set domain (browser handles it)
+              // This ensures cookies work on localhost
+              if (cookieOptions.domain) {
+                delete cookieOptions.domain;
+              }
+            }
+            
+            // Remove undefined values to avoid issues
+            Object.keys(cookieOptions).forEach(key => {
+              if (cookieOptions[key] === undefined) {
+                delete cookieOptions[key];
+              }
+            });
+            
+            console.log(`[Middleware] Setting cookie: ${name}, domain: ${cookieOptions.domain || 'default'}, secure: ${cookieOptions.secure}, sameSite: ${cookieOptions.sameSite}, localhost: ${isLocalhost}`);
+            response.cookies.set(name, value, cookieOptions);
           });
         },
       },
     });
 
-    // This will refresh the session if expired - required for OAuth callbacks
-    // It also processes the OAuth callback and sets the session cookie
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Check for OAuth callback (has code parameter in URL)
+    const url = request.nextUrl;
+    const code = url.searchParams.get("code");
+    const error = url.searchParams.get("error");
+    const isOAuthCallback = !!code || !!error;
 
-    // If we have a user and we're on the app page, ensure session is set
-    if (user && request.nextUrl.pathname === "/app") {
-      // Session is established, continue
+    // Log OAuth callback detection
+    if (isOAuthCallback) {
+      console.log("[Middleware] OAuth callback detected");
+      console.log("[Middleware] URL:", url.toString());
+      console.log("[Middleware] Has code:", !!code);
+      console.log("[Middleware] Has error:", !!error);
+      console.log("[Middleware] Hostname:", url.hostname);
+    }
+
+    // getSession() will automatically exchange the OAuth code for tokens
+    // This is the correct way to handle OAuth callbacks with Supabase SSR
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    // Log session status
+    if (isOAuthCallback) {
+      if (session) {
+        console.log("[Middleware] OAuth callback processed successfully");
+        console.log("[Middleware] Session user ID:", session.user?.id);
+        console.log("[Middleware] Session email:", session.user?.email);
+      } else if (sessionError) {
+        console.error("[Middleware] OAuth callback error:", sessionError);
+      } else {
+        console.warn("[Middleware] OAuth callback but no session found");
+      }
     }
   }
 
