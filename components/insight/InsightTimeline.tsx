@@ -17,6 +17,8 @@ import {
 import type { Insight, InsightSource, InsightCategory, InsightSeverity, InsightAction } from "@/types";
 import { formatRelativeTime, getSourceLabel, getSeverityColor, getCategoryColor } from "@/lib/insight/utils";
 import { useAppState } from "@/context/AppStateContext";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import { useAccountMode } from "@/hooks/useAccountMode";
 import TrialExpiredLock from "./TrialExpiredLock";
 
 interface InsightTimelineProps {
@@ -85,6 +87,8 @@ const mockInsights: Insight[] = [
 
 export default function InsightTimeline({ range, onInsightClick, isPreview = false }: InsightTimelineProps) {
   const { isAuthenticated } = useAppState();
+  const { isSuperAdmin } = useAgentAccess();
+  const { mode: accountMode } = useAccountMode();
   const [insights, setInsights] = useState<Insight[]>(isPreview ? mockInsights : []);
   const [loading, setLoading] = useState(!isPreview);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +96,12 @@ export default function InsightTimeline({ range, onInsightClick, isPreview = fal
   const [filter, setFilter] = useState<"all" | "important" | "warnings" | "critical">("all");
   const [sourceFilter, setSourceFilter] = useState<InsightSource | "all">("all");
   const [selectedInsight, setSelectedInsight] = useState<Insight | null>(null);
+  
+  // Don't show trial expired lock for super admins or users with active subscriptions/trials
+  const shouldShowTrialLock = isUnauthorized && 
+    !isSuperAdmin && 
+    accountMode !== 'subscribed' && 
+    accountMode !== 'trial-active';
 
   const fetchInsights = useCallback(async () => {
     if (isPreview) {
@@ -279,7 +289,7 @@ export default function InsightTimeline({ range, onInsightClick, isPreview = fal
         </div>
       )}
 
-      {!loading && isUnauthorized && (
+      {!loading && shouldShowTrialLock && (
         <TrialExpiredLock />
       )}
 

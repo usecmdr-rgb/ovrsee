@@ -223,57 +223,107 @@ function OAuthCallbackHandler({ login, isAuthenticated }: { login: () => void; i
   // Handle OAuth callback - refresh session when landing on /app after OAuth
   useEffect(() => {
     const handleOAuthCallback = async () => {
-      // Check for OAuth callback parameters or hash fragments
+      // Check for OAuth callback parameters
       const urlParams = new URLSearchParams(window.location.search);
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const hasOAuthParams = urlParams.has("code") || urlParams.has("error") || 
-                            hashParams.has("access_token") || hashParams.has("error");
+      const code = urlParams.get("code");
+      const error = urlParams.get("error");
+      const hasOAuthParams = !!code || !!error;
       
       if (hasOAuthParams) {
-        console.log("[OAuth] Detected OAuth callback, waiting for session...");
+        console.log("[OAuth] Detected OAuth callback, processing...");
+        console.log("[OAuth] Current URL:", window.location.href);
+        console.log("[OAuth] Current origin:", window.location.origin);
+        console.log("[OAuth] Has code:", !!code);
+        console.log("[OAuth] Has error:", !!error);
         
-        // Wait for Supabase to process the callback and set cookies
+        if (error) {
+          console.error("[OAuth] OAuth error:", error);
+          // Clean up URL even on error
+          if (window.history.replaceState) {
+            window.history.replaceState({}, "", "/app");
+          }
+          return;
+        }
+        
+        // The middleware should have already processed the OAuth callback
+        // But we need to wait a bit for cookies to be set and session to be available
+        // First, try to refresh the session to ensure it's loaded
+        console.log("[OAuth] Attempting to refresh session...");
+        try {
+          const refreshResult = await supabaseBrowserClient.auth.refreshSession();
+          console.log("[OAuth] Refresh result:", refreshResult.data.session ? "Session found" : "No session");
+        } catch (refreshError) {
+          console.log("[OAuth] Session refresh attempt (may fail if no session yet):", refreshError);
+        }
+        
         // Try multiple times with increasing delays
-        for (let attempt = 0; attempt < 5; attempt++) {
-          await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+        console.log("[OAuth] Polling for session...");
+        for (let attempt = 0; attempt < 10; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
           
           const { data: { session }, error: sessionError } = await supabaseBrowserClient.auth.getSession();
           
           if (session && !sessionError) {
             console.log("[OAuth] Session established!");
+            console.log("[OAuth] User ID:", session.user?.id);
+            console.log("[OAuth] User email:", session.user?.email);
             
             // Ensure profile exists (database trigger should create it, but ensure as fallback)
             try {
-              const { data: { session: currentSession } } = await supabaseBrowserClient.auth.getSession();
-              if (currentSession?.access_token) {
-                await fetch("/api/auth/ensure-profile", {
+              if (session.access_token) {
+                console.log("[OAuth] Ensuring profile exists...");
+                const profileResponse = await fetch("/api/auth/ensure-profile", {
                   method: "POST",
                   headers: {
-                    Authorization: `Bearer ${currentSession.access_token}`,
+                    Authorization: `Bearer ${session.access_token}`,
                   },
                 });
-                console.log("[OAuth] Profile ensured");
+                if (profileResponse.ok) {
+                  console.log("[OAuth] Profile ensured");
+                } else {
+                  console.warn("[OAuth] Profile ensure returned:", profileResponse.status);
+                }
               }
             } catch (profileError) {
               console.error("[OAuth] Error ensuring profile:", profileError);
               // Don't block login if profile creation fails
             }
             
+            console.log("[OAuth] Calling login() to update app state...");
             login();
             
-            // Clean up URL
+            // Clean up URL - remove OAuth parameters
             if (window.history.replaceState) {
               window.history.replaceState({}, "", "/app");
             }
+            console.log("[OAuth] OAuth flow completed successfully");
             return;
+          }
+          
+          // Log progress for debugging
+          if (attempt === 0) {
+            console.log("[OAuth] Attempt 1/10: No session yet, waiting...");
+          } else if (attempt === 4) {
+            console.log("[OAuth] Attempt 5/10: Still waiting for session...");
+          } else if (attempt === 9) {
+            console.error("[OAuth] Attempt 10/10: Failed to get session");
+            if (sessionError) {
+              console.error("[OAuth] Session error:", sessionError);
+            }
           }
         }
         
         console.error("[OAuth] Failed to establish session after OAuth callback");
+        console.error("[OAuth] This may indicate a cookie or redirect URL issue");
+        // Clean up URL even on failure
+        if (window.history.replaceState) {
+          window.history.replaceState({}, "", "/app");
+        }
       } else {
-        // Not an OAuth callback, but check session anyway
+        // Not an OAuth callback, but check session anyway in case it was established
         const { data: { session } } = await supabaseBrowserClient.auth.getSession();
         if (session && !isAuthenticated) {
+          console.log("[OAuth] Session found but not authenticated in state, syncing...");
           login();
         }
       }

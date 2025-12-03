@@ -2,11 +2,12 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { mockMediaItems } from "@/lib/data";
+import { supabaseBrowserClient } from "@/lib/supabaseClient";
+import { isDemoMode } from "@/lib/config/demoMode";
+import { useAccountMode } from "@/hooks/useAccountMode";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
 import { useAppState } from "@/context/AppStateContext";
 import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
-import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAgentAccess } from "@/hooks/useAgentAccess";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
@@ -1080,7 +1081,7 @@ function MuAnalyticsPanel({
   connectedAccounts,
   onRefreshMetrics,
 }: {
-  mediaItems: typeof mockMediaItems;
+  mediaItems: Array<{ filename: string; url: string; type: "image" | "video" }>;
   connectedSocials: Record<SocialPlatform, boolean>;
   fetchingMetrics: Record<string, boolean>;
   handlePostToSocial: (mediaId: string, platform: SocialPlatform) => Promise<void>;
@@ -1891,30 +1892,56 @@ export default function StudioPage() {
   const { stats, loading, error } = useAgentStats();
   const t = useTranslation();
   
+  // Get current user and account mode for demo mode check
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { mode: accountMode } = useAccountMode();
+  
+  useEffect(() => {
+    supabaseBrowserClient.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUser(user);
+    });
+  }, []);
+  
+  // Check if we should use demo mode
+  // Demo data is shown for: unauthenticated users, authenticated users in 'preview' mode
+  // Demo data is removed for: authenticated users with 'trial-active', 'trial-expired', or 'subscribed'
+  const shouldUseDemoMode = useMemo(() => {
+    return isDemoMode(currentUser, accountMode);
+  }, [currentUser, accountMode]);
+  
   // Wait for access to be determined before showing stats to prevent flashing
   const isAccessReady = !accessLoading;
   
-  // Use preview/mock data if user doesn't have access (only after access check is complete)
-  const isPreview = isAccessReady && !hasAccess;
+  // Use preview mode only if user doesn't have access (not for demo mode)
+  const isPreview = isAccessReady && !hasAccess && !shouldUseDemoMode;
   
-  // Fallback to realistic random numbers if no stats available or in preview mode
-  // Only show fallback stats when access check is complete to prevent number flashing
-  const fallbackStats = useMemo(() => {
+  // For authenticated users, always use real stats (or empty stats if no data)
+  // Never show fake numbers for authenticated users
+  const latestStats = useMemo(() => {
     if (!isAccessReady) {
       // Return empty stats while loading to prevent flash
       return emptyAgentStats;
     }
-    return {
-      ...emptyAgentStats,
-      mu_media_edits: isPreview ? 87 : 124,
-    };
-  }, [isPreview, isAccessReady]);
+    
+    // If we have real stats, use them
+    if (stats) {
+      return stats;
+    }
+    
+    // If no stats and user is authenticated, return empty stats (0s)
+    // Only use fallback for preview mode (unauthenticated users)
+    if (isPreview) {
+      return emptyAgentStats;
+    }
+    
+    // For authenticated users with no stats yet, return empty stats
+    return emptyAgentStats;
+  }, [stats, isAccessReady, isPreview]);
   
-  const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
   
   const agentConfig = AGENT_BY_ID["studio"];
-  const [selectedMediaName, setSelectedMediaName] = useState<string>(mockMediaItems[0]?.filename ?? "");
+  const [selectedMediaName, setSelectedMediaName] = useState<string>("");
   const [customFilenames, setCustomFilenames] = useState<Record<string, string>>({});
   // Multi-asset state
   const [assets, setAssets] = useState<StudioAsset[]>([]);
@@ -1941,7 +1968,7 @@ export default function StudioPage() {
   const [showAdvancedAdjustments, setShowAdvancedAdjustments] = useState(false);
   // Shorts composition state (for video assets)
   const [shortsComposition, setShortsComposition] = useState<string[]>([]); // Array of asset IDs in order
-  const [mediaItems, setMediaItems] = useState(mockMediaItems);
+  const [mediaItems, setMediaItems] = useState<typeof mockMediaItems>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     adjust: true,
     filters: false,
@@ -2645,42 +2672,20 @@ export default function StudioPage() {
   // Fetch posts and metrics from connected social platforms
   const fetchSocialMediaMetrics = async (platform: SocialPlatform) => {
     try {
-      // In production, this would call your backend API which uses the platform's API
-      // For now, we'll simulate fetching data
-      const mockPosts: SocialMediaPost[] = [
-        {
-          id: `post_${platform}_${Date.now()}_1`,
-          platform,
-          postId: `platform_${Date.now()}_1`,
-          caption: `Recent post from ${platform}`,
-          postedAt: new Date(Date.now() - 86400000 * Math.floor(Math.random() * 30)).toISOString(),
-          metrics: {
-            likes: Math.floor(Math.random() * 5000) + 100,
-            comments: Math.floor(Math.random() * 500) + 10,
-            reposts: platform === "tiktok" || platform === "facebook" ? Math.floor(Math.random() * 200) + 5 : undefined,
-            views: Math.floor(Math.random() * 50000) + 1000,
-            shares: platform === "facebook" ? Math.floor(Math.random() * 100) + 5 : undefined,
-            saves: platform === "instagram" ? Math.floor(Math.random() * 300) + 20 : undefined,
-          },
-          lastSyncedAt: new Date().toISOString(),
-        },
-        {
-          id: `post_${platform}_${Date.now()}_2`,
-          platform,
-          postId: `platform_${Date.now()}_2`,
-          caption: `Another post from ${platform}`,
-          postedAt: new Date(Date.now() - 86400000 * Math.floor(Math.random() * 30)).toISOString(),
-          metrics: {
-            likes: Math.floor(Math.random() * 5000) + 100,
-            comments: Math.floor(Math.random() * 500) + 10,
-            reposts: platform === "tiktok" || platform === "facebook" ? Math.floor(Math.random() * 200) + 5 : undefined,
-            views: Math.floor(Math.random() * 50000) + 1000,
-            shares: platform === "facebook" ? Math.floor(Math.random() * 100) + 5 : undefined,
-            saves: platform === "instagram" ? Math.floor(Math.random() * 300) + 20 : undefined,
-          },
-          lastSyncedAt: new Date().toISOString(),
-        },
-      ];
+      // For authenticated users, fetch real data from API
+      // Never use mock data for authenticated users
+      if (!shouldUseDemoMode) {
+        // TODO: Create API endpoint for social media posts
+        // For now, authenticated users see empty array (no mock data)
+        setSocialMediaPosts((prev) => {
+          // Remove old posts from this platform
+          return prev.filter((p) => p.platform !== platform);
+        });
+        return [];
+      }
+      
+      // Demo mode only (currently disabled)
+      const mockPosts: SocialMediaPost[] = [];
 
       setSocialMediaPosts((prev) => {
         // Remove old posts from this platform and add new ones
@@ -2889,15 +2894,21 @@ export default function StudioPage() {
 
     setFetchingMetrics((prev) => ({ ...prev, [`${mediaId}_${platform}`]: true }));
 
-    // Simulate API call to fetch metrics
-    // In production, this would call: GET /api/social/metrics?platform=${platform}&postId=${postId}
+    // For authenticated users, fetch real metrics from API
+    // Never use mock data for authenticated users
+    if (shouldUseDemoMode) {
+      // Demo mode is disabled, so this won't run
+      return;
+    }
+    
+    // TODO: Create API endpoint for social media metrics
+    // For now, authenticated users see zero metrics (no mock data)
     setTimeout(() => {
-      // Simulate fetching real metrics (in production, these would come from the API)
       const mockMetrics = {
-        impressions: Math.floor(Math.random() * 20000) + 5000,
-        likes: Math.floor(Math.random() * 1000) + 100,
-        reposts: Math.floor(Math.random() * 200) + 20,
-        comments: Math.floor(Math.random() * 150) + 10,
+        impressions: 0,
+        likes: 0,
+        reposts: 0,
+        comments: 0,
       };
 
       setMediaItems((prev) =>
@@ -3265,9 +3276,9 @@ export default function StudioPage() {
         
               {/* Right Side: Agent Chat */}
               <div className="space-y-4">
-                <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 flex flex-col" style={{ minHeight: "500px" }}>
-                  <h3 className="text-sm font-semibold mb-3">{t("studioAgentChat")}</h3>
-                  <div className="flex-1 space-y-2 overflow-y-auto text-sm min-h-0">
+                <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 flex flex-col" style={{ height: "320px" }}>
+                  <h3 className="text-sm font-semibold mb-3 flex-shrink-0">{t("studioAgentChat")}</h3>
+                  <div className="flex-1 space-y-2 overflow-y-auto text-sm min-h-0 pr-2">
                     {muMessages.map((message, index) => (
                       <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                         <span
@@ -3282,7 +3293,7 @@ export default function StudioPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex gap-2 flex-shrink-0">
                     <input
                       className="flex-1 rounded-2xl border border-slate-200 bg-transparent px-4 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
                       placeholder={t("studioAddTweakRequest")}
@@ -3299,7 +3310,7 @@ export default function StudioPage() {
                       {muLoading ? "Thinking…" : t("send")}
                     </button>
                   </div>
-                  <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+                  <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800 flex-shrink-0">
                     <p className="text-xs font-semibold mb-2">Automation updates</p>
                     <div className="space-y-2 max-h-32 overflow-y-auto text-xs">
                       {activityLog.map((message, index) => (

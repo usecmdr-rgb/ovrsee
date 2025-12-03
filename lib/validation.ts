@@ -35,10 +35,24 @@ export const uuidSchema = z.string().uuid("Invalid UUID format");
 export const emailSchema = z.string().email("Invalid email format");
 
 /**
- * Stripe checkout request validation
+ * Stripe checkout request validation.
+ *
+ * New canonical shape:
+ * - planCode: "essentials" | "professional" | "executive"
+ * - billingInterval: "monthly" | "yearly"
+ *
+ * Legacy support:
+ * - tier: "basic" | "advanced" | "elite" (mapped to planCode server-side)
  */
 export const stripeCheckoutRequestSchema = z.object({
-  tier: subscriptionTierSchema,
+  // New fields (preferred)
+  planCode: z.enum(["essentials", "professional", "executive"]).optional(),
+  billingInterval: z.enum(["monthly", "yearly"]).optional().default("monthly"),
+
+  // Legacy fields (for backward compatibility)
+  tier: subscriptionTierSchema.optional(),
+  billingCycle: z.enum(["monthly", "yearly"]).optional(),
+
   userId: uuidSchema.optional(), // Optional because we'll get it from auth
 });
 

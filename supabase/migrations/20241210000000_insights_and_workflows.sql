@@ -152,3 +152,5 @@ CREATE POLICY "Users can delete their own briefs"
   ON insight_briefs FOR DELETE
   USING (auth.uid() = user_id);
 
+
+

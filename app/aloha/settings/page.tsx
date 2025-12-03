@@ -12,9 +12,23 @@ import {
   type AlohaVoiceProfile,
 } from "@/lib/aloha/voice-profiles";
 import type { AlohaProfile } from "@/types/database";
-import type { UserPhoneNumber } from "@/types/database";
 import CallForwardingModal from "@/components/modals/CallForwardingModal";
-import { Search, Shuffle, X, Check, Brain, MessageSquare, Heart, Shield, Users, Clock, Play, Square } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import {
+  Search,
+  Shuffle,
+  X,
+  Check,
+  Brain,
+  MessageSquare,
+  Heart,
+  Shield,
+  Users,
+  Clock,
+  Play,
+  Square,
+  AlertTriangle,
+} from "lucide-react";
 import { useTranslation } from "@/hooks/useTranslation";
 
 type VoicePreviewSourcesMap = Partial<
@@ -33,7 +47,7 @@ export default function AlohaSettingsPage() {
   const router = useRouter();
   const t = useTranslation();
   const [profile, setProfile] = useState<AlohaProfile | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState<UserPhoneNumber | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +55,27 @@ export default function AlohaSettingsPage() {
   
   // Voice settings
   const [displayName, setDisplayName] = useState("");
-  const [alohaSelfName, setAlohaSelfName] = useState("");
   const [selectedVoiceKey, setSelectedVoiceKey] = useState<AlohaVoiceKey>(DEFAULT_VOICE_KEY);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<AlohaVoiceKey | null>(null);
   const [voicePreviewSources, setVoicePreviewSources] = useState<VoicePreviewSourcesMap>({});
   const [previewGenerationStatus, setPreviewGenerationStatus] =
     useState<Partial<Record<AlohaVoiceKey, "idle" | "pending">>>({});
   const [previewToast, setPreviewToast] = useState<string | null>(null);
+
+  // Twilio health check
+  const [twilioHealth, setTwilioHealth] = useState<{
+    status: "ok" | "error" | null;
+    message?: string;
+    number?: string | null;
+    checks?: {
+      exists: boolean;
+      webhookConfigured: boolean;
+      webhookUrl: string | null;
+      expectedWebhook: string | null;
+      voiceMethodCorrect: boolean;
+    };
+  } | null>(null);
+  const [twilioHealthLoading, setTwilioHealthLoading] = useState(false);
 
   // Phone number selection
   const [country, setCountry] = useState("US");
@@ -56,6 +84,8 @@ export default function AlohaSettingsPage() {
   const [availableNumbers, setAvailableNumbers] = useState<Array<{ phoneNumber: string; friendlyName?: string }>>([]);
   const [randomNumber, setRandomNumber] = useState<string | null>(null);
   const [purchasingNumber, setPurchasingNumber] = useState<string | null>(null);
+  const [pendingNumberToChange, setPendingNumberToChange] = useState<string | null>(null);
+  const [showChangeNumberConfirm, setShowChangeNumberConfirm] = useState(false);
 
   // Voicemail settings
   const [externalPhoneNumber, setExternalPhoneNumber] = useState("");
@@ -66,9 +96,8 @@ export default function AlohaSettingsPage() {
 
   const voiceProfiles = useMemo(() => getAllVoiceProfiles(), []);
   const trimmedDisplayName = displayName.trim();
-  const trimmedSelfName = alohaSelfName.trim();
-  // Use self-name if set, otherwise use display name, otherwise default to "Aloha"
-  const previewName = trimmedSelfName || trimmedDisplayName || "Aloha";
+  // Use display name, otherwise default to "Aloha"
+  const previewName = trimmedDisplayName || "Aloha";
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const voicePreviewSourcesRef = useRef<VoicePreviewSourcesMap>({});
   const pendingPreviewRequestsRef =
@@ -386,29 +415,68 @@ export default function AlohaSettingsPage() {
           setProfile(profileData.profile);
           const fetchedDisplayName = (profileData.profile.display_name || "Aloha").trim();
           setDisplayName(fetchedDisplayName);
-          setAlohaSelfName(profileData.profile.aloha_self_name || "");
           setSelectedVoiceKey(
             (profileData.profile.voice_key as AlohaVoiceKey) || DEFAULT_VOICE_KEY
           );
         }
       }
 
-      // Fetch phone number
-      const phoneResponse = await fetch("/api/telephony/twilio/active-number");
+      // Fetch phone number (one per user)
+      const phoneResponse = await fetch("/api/user/phone-number");
       if (phoneResponse.ok) {
         const phoneData = await phoneResponse.json();
-        if (phoneData.ok && phoneData.phoneNumber) {
-          setPhoneNumber(phoneData.phoneNumber);
-          setExternalPhoneNumber(phoneData.phoneNumber.external_phone_number || "");
-          setVoicemailEnabled(phoneData.phoneNumber.voicemail_enabled || false);
-          setForwardingEnabled(phoneData.phoneNumber.forwarding_enabled || false);
-          setForwardingConfirmed(phoneData.phoneNumber.forwarding_confirmed || false);
+        setPhoneNumber(phoneData.phoneNumber || null);
+      }
+
+      // Fetch voicemail settings independently
+      const voicemailResponse = await fetch("/api/telephony/voicemail/settings");
+      if (voicemailResponse.ok) {
+        const voicemailData = await voicemailResponse.json();
+        if (voicemailData.ok && voicemailData.settings) {
+          setExternalPhoneNumber(voicemailData.settings.externalPhoneNumber || "");
+          setVoicemailEnabled(!!voicemailData.settings.voicemailEnabled);
+          setForwardingEnabled(!!voicemailData.settings.forwardingEnabled);
+          setForwardingConfirmed(!!voicemailData.settings.forwardingConfirmed);
         }
       }
+
+      // Fetch Twilio number health
+      await fetchTwilioHealth();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTwilioHealth = async () => {
+    try {
+      setTwilioHealthLoading(true);
+      const response = await fetch("/api/twilio/health");
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setTwilioHealth({
+          status: "error",
+          message: data?.message || "Failed to check Twilio health.",
+        });
+        return;
+      }
+
+      setTwilioHealth({
+        status: data.status,
+        message: data.message,
+        number: data.number,
+        checks: data.checks || null,
+      });
+    } catch (err: any) {
+      console.error("Error fetching Twilio health:", err);
+      setTwilioHealth({
+        status: "error",
+        message: err.message || "Failed to check Twilio health.",
+      });
+    } finally {
+      setTwilioHealthLoading(false);
     }
   };
 
@@ -428,7 +496,8 @@ export default function AlohaSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           display_name: trimmedDisplayName,
-          aloha_self_name: alohaSelfName.trim() || null,
+          // Keep self-name wiring unified with Agent Name
+          aloha_self_name: trimmedDisplayName,
           voice_key: selectedVoiceKey,
         }),
       });
@@ -442,9 +511,7 @@ export default function AlohaSettingsPage() {
       if (data.ok && data.profile) {
         setProfile(data.profile);
         setDisplayName(trimmedDisplayName);
-        const newSelfName = data.profile.aloha_self_name || "";
-        setAlohaSelfName(newSelfName);
-        
+
         // If voice pack was regenerated, update the preview sources
         if (data.voicePack) {
           const blob = base64ToBlob(
@@ -452,7 +519,7 @@ export default function AlohaSettingsPage() {
             data.voicePack.contentType || "audio/mpeg"
           );
           // Calculate effective name for preview (use self-name if set, otherwise display name, otherwise "Aloha")
-          const effectiveName = newSelfName.trim() || trimmedDisplayName || "Aloha";
+          const effectiveName = trimmedDisplayName || "Aloha";
           // Update preview for the selected voice
           updateVoicePreviewSource(selectedVoiceKey, getVoicePreviewScript(selectedVoiceKey, effectiveName), blob);
         }
@@ -472,7 +539,7 @@ export default function AlohaSettingsPage() {
       setSearchingNumbers(true);
       setError(null);
       const response = await fetch(
-        `/api/telephony/twilio/available-numbers?country=${country}${areaCode ? `&areaCode=${areaCode}` : ""}`
+        `/api/phone-numbers/available?country=${country}${areaCode ? `&areaCode=${areaCode}` : ""}`
       );
       const data = await response.json();
       
@@ -491,17 +558,27 @@ export default function AlohaSettingsPage() {
   const handleGetRandomNumber = async () => {
     try {
       setError(null);
-      const response = await fetch(
-        `/api/telephony/twilio/random-number?country=${country}${areaCode ? `&areaCode=${areaCode}` : ""}`
-      );
-      const data = await response.json();
+      const response = await fetch("/api/user/phone-number/random", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          country,
+          areaCode: areaCode || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => null);
       
       if (!response.ok) {
-        throw new Error(data.error || "Failed to get random number");
+        throw new Error(
+          data?.error || "Could not assign a random number. Please try again."
+        );
       }
       
-      setRandomNumber(data.phoneNumber);
-      setAvailableNumbers([{ phoneNumber: data.phoneNumber, friendlyName: data.friendlyName }]);
+      setPhoneNumber(data.phoneNumber || null);
+      setRandomNumber(null);
+      setAvailableNumbers([]);
+      // Re-run health check so user sees fresh status
+      await fetchTwilioHealth();
     } catch (err: any) {
       setError(err.message);
     }
@@ -509,16 +586,23 @@ export default function AlohaSettingsPage() {
 
   const handlePurchaseNumber = async (phoneNumberToPurchase: string) => {
     try {
-      setPurchasingNumber(phoneNumberToPurchase);
       setError(null);
+
+      // If user already has a number, this is a change → show confirmation first
+      if (phoneNumber) {
+        setPendingNumberToChange(phoneNumberToPurchase);
+        setShowChangeNumberConfirm(true);
+        return;
+      }
+
+      // First-time assignment (no monthly limit)
+      setPurchasingNumber(phoneNumberToPurchase);
       
-      const response = await fetch("/api/telephony/twilio/purchase-number", {
+      const response = await fetch("/api/user/phone-number", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: phoneNumberToPurchase,
-          country,
-          areaCode: areaCode || undefined,
         }),
       });
       
@@ -539,6 +623,42 @@ export default function AlohaSettingsPage() {
     }
   };
 
+  const confirmChangeNumber = async () => {
+    if (!pendingNumberToChange) return;
+    try {
+      setPurchasingNumber(pendingNumberToChange);
+      setError(null);
+
+      const response = await fetch("/api/user/phone-number", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: pendingNumberToChange,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        // Surface monthly limit or other business-rule errors clearly
+        throw new Error(
+          data?.error ||
+            "Failed to change number. You may have reached the monthly change limit."
+        );
+      }
+
+      await fetchData();
+      setAvailableNumbers([]);
+      setRandomNumber(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPurchasingNumber(null);
+      setPendingNumberToChange(null);
+      setShowChangeNumberConfirm(false);
+    }
+  };
+
   const handleReleaseNumber = async () => {
     if (!confirm("Are you sure you want to release your Aloha number? This will disable voicemail and forwarding.")) {
       return;
@@ -546,17 +666,16 @@ export default function AlohaSettingsPage() {
 
     try {
       setError(null);
-      const response = await fetch("/api/telephony/twilio/release-number", {
-        method: "POST",
+      const response = await fetch("/api/user/phone-number", {
+        method: "DELETE",
       });
       
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to release number");
+      if (!response.ok && response.status !== 204) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Failed to release number");
       }
       
-      // Refresh phone number data
+      // Refresh phone number and voicemail data
       await fetchData();
     } catch (err: any) {
       setError(err.message);
@@ -712,7 +831,7 @@ export default function AlohaSettingsPage() {
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Your active Aloha number:</p>
                   <p className="text-lg font-mono font-semibold text-slate-900 dark:text-slate-100 mt-1">
-                    {phoneNumber.phone_number}
+                    {phoneNumber}
                   </p>
                 </div>
                 <button
@@ -804,6 +923,110 @@ export default function AlohaSettingsPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* Phone Number Health Check */}
+        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-semibold">Phone Number Health Check</h2>
+            <button
+              onClick={fetchTwilioHealth}
+              disabled={twilioHealthLoading}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              {twilioHealthLoading ? "Checking..." : "Recheck"}
+            </button>
+          </div>
+
+          {twilioHealth?.status === "ok" ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-900/20">
+              <div className="mt-0.5">
+                <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                  Your Twilio number is correctly connected to Aloha.
+                </p>
+                {twilioHealth.number && (
+                  <p className="mt-1 text-xs font-mono text-emerald-800 dark:text-emerald-200">
+                    {twilioHealth.number}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/20">
+                <div className="mt-0.5">
+                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                    Your Twilio number is not fully connected to Aloha.
+                  </p>
+                  <p className="mt-1 text-xs text-red-700 dark:text-red-300">
+                    {twilioHealth?.message ||
+                      "One or more configuration checks failed. See details below."}
+                  </p>
+                </div>
+              </div>
+
+              {twilioHealth?.checks && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                  <ul className="space-y-1">
+                    <li>
+                      <span className="font-semibold">Twilio number exists:</span>{" "}
+                      {twilioHealth.checks.exists ? "Yes" : "No"}
+                    </li>
+                    <li>
+                      <span className="font-semibold">Webhook configured:</span>{" "}
+                      {twilioHealth.checks.webhookConfigured ? "Yes" : "No"}
+                    </li>
+                    <li className="break-all">
+                      <span className="font-semibold">Current webhook URL:</span>{" "}
+                      {twilioHealth.checks.webhookUrl || "N/A"}
+                    </li>
+                    <li className="break-all">
+                      <span className="font-semibold">Expected webhook URL:</span>{" "}
+                      {twilioHealth.checks.expectedWebhook || "N/A"}
+                    </li>
+                    <li>
+                      <span className="font-semibold">Voice method is POST:</span>{" "}
+                      {twilioHealth.checks.voiceMethodCorrect ? "Yes" : "No"}
+                    </li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  If the health check fails, you can attempt an automatic fix.
+                </p>
+                <button
+                  onClick={async () => {
+                    try {
+                      setError(null);
+                      const response = await fetch("/api/twilio/fix", {
+                        method: "POST",
+                      });
+                      const data = await response.json().catch(() => null);
+                      if (!response.ok || !data?.success) {
+                        throw new Error(
+                          data?.error || "Failed to fix Twilio configuration."
+                        );
+                      }
+                      await fetchTwilioHealth();
+                    } catch (err: any) {
+                      setError(err.message);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-accent text-white hover:bg-brand-accent/90"
+                >
+                  Fix It
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -931,33 +1154,6 @@ export default function AlohaSettingsPage() {
             />
             <p className="text-xs text-slate-500">
               {t("displayNameExample")}
-            </p>
-          </div>
-        </section>
-
-        {/* Self-Name Customization Section */}
-        <section className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <h2 className="text-xl font-semibold mb-4">Self-Name Customization</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-            What should this agent call itself? If left blank, it will continue to refer to itself as &quot;Aloha&quot;.
-          </p>
-          <div className="space-y-2">
-            <label htmlFor="aloha-self-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              What should this agent call itself?
-            </label>
-            <input
-              id="aloha-self-name"
-              type="text"
-              value={alohaSelfName}
-              onChange={(e) => setAlohaSelfName(e.target.value)}
-              placeholder="Aloha"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-accent focus:border-transparent dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              e.g. Maya, CommanderX Assistant. Leave blank to use &quot;Aloha&quot;.
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              When you save this setting, the voice pack audio will be regenerated with the new self-name.
             </p>
           </div>
         </section>
@@ -1243,10 +1439,59 @@ export default function AlohaSettingsPage() {
         <CallForwardingModal
           open={showForwardingModal}
           onClose={() => setShowForwardingModal(false)}
-          alohaPhoneNumber={phoneNumber.phone_number}
+          alohaPhoneNumber={phoneNumber}
           onConfirmSetup={handleConfirmForwarding}
         />
       )}
+
+      {/* Change Number Confirmation Modal */}
+      <Modal
+        title="Change Aloha number?"
+        open={showChangeNumberConfirm}
+        onClose={() => {
+          if (!purchasingNumber) {
+            setShowChangeNumberConfirm(false);
+            setPendingNumberToChange(null);
+          }
+        }}
+        description="You can only change your Aloha number once per month (UTC). This change will use your number change for the current month."
+        size="md"
+      >
+        <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              You can only change your Aloha number once per calendar month (UTC). Proceeding will use your change for this month.
+            </p>
+          {pendingNumberToChange && (
+            <p className="text-sm">
+              <span className="font-medium">New number:</span>{" "}
+              <span className="font-mono">{pendingNumberToChange}</span>
+            </p>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              onClick={() => {
+                if (!purchasingNumber) {
+                  setShowChangeNumberConfirm(false);
+                  setPendingNumberToChange(null);
+                }
+              }}
+              disabled={!!purchasingNumber}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 text-sm rounded-lg bg-brand-accent text-white hover:bg-brand-accent/90 disabled:opacity-50"
+              onClick={confirmChangeNumber}
+              disabled={!!purchasingNumber}
+            >
+              Yes, change my number
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
 
       {previewToast && (

@@ -84,3 +84,5 @@ Remember: The mobile app is completely separate from the main Next.js project:
 - **Mobile app**: `/Users/nemo/cursor/COMMANDX/ovrsee-mobile/` (Expo/React Native)
 
 You must be in the `ovrsee-mobile` directory to run mobile app commands.
+
+

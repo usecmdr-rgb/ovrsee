@@ -25,11 +25,22 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Create indexes for profiles
-CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
-CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer_id ON public.profiles(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_profiles_stripe_subscription_id ON public.profiles(stripe_subscription_id);
-CREATE INDEX IF NOT EXISTS idx_profiles_subscription_tier ON public.profiles(subscription_tier);
+-- Create indexes for profiles (only if columns exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'email') THEN
+    CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'stripe_customer_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer_id ON public.profiles(stripe_customer_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'stripe_subscription_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_profiles_stripe_subscription_id ON public.profiles(stripe_subscription_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'subscription_tier') THEN
+    CREATE INDEX IF NOT EXISTS idx_profiles_subscription_tier ON public.profiles(subscription_tier);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 2. SUBSCRIPTIONS TABLE (Normalized subscription data)
@@ -53,12 +64,25 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   CONSTRAINT subscriptions_user_id_unique UNIQUE(user_id)
 );
 
--- Create indexes for subscriptions
-CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON public.subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON public.subscriptions(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id ON public.subscriptions(stripe_subscription_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON public.subscriptions(status);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_tier ON public.subscriptions(tier);
+-- Create indexes for subscriptions (only if columns exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON public.subscriptions(user_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'stripe_customer_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON public.subscriptions(stripe_customer_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'stripe_subscription_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id ON public.subscriptions(stripe_subscription_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'status') THEN
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON public.subscriptions(status);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'tier') THEN
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_tier ON public.subscriptions(tier);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 3. AGENTS TABLE
@@ -76,10 +100,20 @@ CREATE TABLE IF NOT EXISTS public.agents (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create indexes for agents
-CREATE INDEX IF NOT EXISTS idx_agents_user_id ON public.agents(user_id);
-CREATE INDEX IF NOT EXISTS idx_agents_agent_type ON public.agents(agent_type);
-CREATE INDEX IF NOT EXISTS idx_agents_user_agent_type ON public.agents(user_id, agent_type);
+-- Create indexes for agents (only if columns exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agents' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_agents_user_id ON public.agents(user_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agents' AND column_name = 'agent_type') THEN
+    CREATE INDEX IF NOT EXISTS idx_agents_agent_type ON public.agents(agent_type);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agents' AND column_name = 'user_id') 
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agents' AND column_name = 'agent_type') THEN
+    CREATE INDEX IF NOT EXISTS idx_agents_user_agent_type ON public.agents(user_id, agent_type);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 4. AGENT CONVERSATIONS TABLE
@@ -95,11 +129,24 @@ CREATE TABLE IF NOT EXISTS public.agent_conversations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create indexes for agent_conversations
-CREATE INDEX IF NOT EXISTS idx_agent_conversations_user_id ON public.agent_conversations(user_id);
-CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_id ON public.agent_conversations(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_type ON public.agent_conversations(agent_type);
-CREATE INDEX IF NOT EXISTS idx_agent_conversations_user_agent_created ON public.agent_conversations(user_id, agent_type, created_at DESC);
+-- Create indexes for agent_conversations (only if columns exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_conversations_user_id ON public.agent_conversations(user_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'agent_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_id ON public.agent_conversations(agent_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'agent_type') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_type ON public.agent_conversations(agent_type);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'user_id')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'agent_type')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_conversations_user_agent_created ON public.agent_conversations(user_id, agent_type, created_at DESC);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 5. AGENT MESSAGES TABLE
@@ -114,10 +161,20 @@ CREATE TABLE IF NOT EXISTS public.agent_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create indexes for agent_messages
-CREATE INDEX IF NOT EXISTS idx_agent_messages_conversation_id ON public.agent_messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_agent_messages_user_id ON public.agent_messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_agent_messages_conversation_created ON public.agent_messages(conversation_id, created_at DESC);
+-- Create indexes for agent_messages (only if columns exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_messages' AND column_name = 'conversation_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_conversation_id ON public.agent_messages(conversation_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_messages' AND column_name = 'user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_user_id ON public.agent_messages(user_id);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_messages' AND column_name = 'conversation_id')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_messages' AND column_name = 'created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_conversation_created ON public.agent_messages(conversation_id, created_at DESC);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 6. ROW LEVEL SECURITY (RLS) POLICIES
@@ -162,68 +219,59 @@ CREATE POLICY "Users can insert own subscription"
   ON public.subscriptions FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Agents policies
-DROP POLICY IF EXISTS "Users can view own agents" ON public.agents;
-CREATE POLICY "Users can view own agents"
-  ON public.agents FOR SELECT
-  USING (auth.uid() = user_id OR user_id IS NULL);
+-- Agents policies (only if user_id column exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agents' AND column_name = 'user_id') THEN
+    DROP POLICY IF EXISTS "Users can view own agents" ON public.agents;
+    EXECUTE 'CREATE POLICY "Users can view own agents" ON public.agents FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL)';
+    
+    DROP POLICY IF EXISTS "Users can update own agents" ON public.agents;
+    EXECUTE 'CREATE POLICY "Users can update own agents" ON public.agents FOR UPDATE USING (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can insert own agents" ON public.agents;
+    EXECUTE 'CREATE POLICY "Users can insert own agents" ON public.agents FOR INSERT WITH CHECK (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can delete own agents" ON public.agents;
+    EXECUTE 'CREATE POLICY "Users can delete own agents" ON public.agents FOR DELETE USING (auth.uid() = user_id)';
+  END IF;
+END $$;
 
-DROP POLICY IF EXISTS "Users can update own agents" ON public.agents;
-CREATE POLICY "Users can update own agents"
-  ON public.agents FOR UPDATE
-  USING (auth.uid() = user_id);
+-- Agent conversations policies (only if user_id column exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_conversations' AND column_name = 'user_id') THEN
+    DROP POLICY IF EXISTS "Users can view own conversations" ON public.agent_conversations;
+    EXECUTE 'CREATE POLICY "Users can view own conversations" ON public.agent_conversations FOR SELECT USING (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can update own conversations" ON public.agent_conversations;
+    EXECUTE 'CREATE POLICY "Users can update own conversations" ON public.agent_conversations FOR UPDATE USING (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can insert own conversations" ON public.agent_conversations;
+    EXECUTE 'CREATE POLICY "Users can insert own conversations" ON public.agent_conversations FOR INSERT WITH CHECK (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can delete own conversations" ON public.agent_conversations;
+    EXECUTE 'CREATE POLICY "Users can delete own conversations" ON public.agent_conversations FOR DELETE USING (auth.uid() = user_id)';
+  END IF;
+END $$;
 
-DROP POLICY IF EXISTS "Users can insert own agents" ON public.agents;
-CREATE POLICY "Users can insert own agents"
-  ON public.agents FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can delete own agents" ON public.agents;
-CREATE POLICY "Users can delete own agents"
-  ON public.agents FOR DELETE
-  USING (auth.uid() = user_id);
-
--- Agent conversations policies
-DROP POLICY IF EXISTS "Users can view own conversations" ON public.agent_conversations;
-CREATE POLICY "Users can view own conversations"
-  ON public.agent_conversations FOR SELECT
-  USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can update own conversations" ON public.agent_conversations;
-CREATE POLICY "Users can update own conversations"
-  ON public.agent_conversations FOR UPDATE
-  USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can insert own conversations" ON public.agent_conversations;
-CREATE POLICY "Users can insert own conversations"
-  ON public.agent_conversations FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can delete own conversations" ON public.agent_conversations;
-CREATE POLICY "Users can delete own conversations"
-  ON public.agent_conversations FOR DELETE
-  USING (auth.uid() = user_id);
-
--- Agent messages policies
-DROP POLICY IF EXISTS "Users can view own messages" ON public.agent_messages;
-CREATE POLICY "Users can view own messages"
-  ON public.agent_messages FOR SELECT
-  USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can insert own messages" ON public.agent_messages;
-CREATE POLICY "Users can insert own messages"
-  ON public.agent_messages FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can update own messages" ON public.agent_messages;
-CREATE POLICY "Users can update own messages"
-  ON public.agent_messages FOR UPDATE
-  USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can delete own messages" ON public.agent_messages;
-CREATE POLICY "Users can delete own messages"
-  ON public.agent_messages FOR DELETE
-  USING (auth.uid() = user_id);
+-- Agent messages policies (only if user_id column exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'agent_messages' AND column_name = 'user_id') THEN
+    DROP POLICY IF EXISTS "Users can view own messages" ON public.agent_messages;
+    EXECUTE 'CREATE POLICY "Users can view own messages" ON public.agent_messages FOR SELECT USING (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can insert own messages" ON public.agent_messages;
+    EXECUTE 'CREATE POLICY "Users can insert own messages" ON public.agent_messages FOR INSERT WITH CHECK (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can update own messages" ON public.agent_messages;
+    EXECUTE 'CREATE POLICY "Users can update own messages" ON public.agent_messages FOR UPDATE USING (auth.uid() = user_id)';
+    
+    DROP POLICY IF EXISTS "Users can delete own messages" ON public.agent_messages;
+    EXECUTE 'CREATE POLICY "Users can delete own messages" ON public.agent_messages FOR DELETE USING (auth.uid() = user_id)';
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 7. TRIGGERS

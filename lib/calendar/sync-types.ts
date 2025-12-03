@@ -84,3 +84,5 @@ export interface SyncResult {
   errors: Array<{ eventId: string; error: string }>;
 }
 
+
+

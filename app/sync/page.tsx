@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, FormEvent, useEffect, useCallback } from "react";
-import { mockEmails } from "@/lib/data";
 import { useAppState } from "@/context/AppStateContext";
 import type { EmailRecord } from "@/types";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
@@ -11,7 +10,9 @@ import { AGENT_BY_ID } from "@/lib/config/agents";
 import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { useTranslation } from "@/hooks/useTranslation";
 import { getLanguageFromLocale } from "@/lib/localization";
-import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, Clock, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2 } from "lucide-react";
+import { isDemoMode } from "@/lib/config/demoMode";
+import { useAccountMode } from "@/hooks/useAccountMode";
+import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, Clock, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2, RotateCcw } from "lucide-react";
 import SyncIntelligence from "@/components/sync/SyncIntelligence";
 import {
   getLocalDateString,
@@ -120,8 +121,19 @@ interface CustomAlert {
 
 const SyncPage = () => {
   const [activeTab, setActiveTab] = useState<"email" | "calendar">("email");
-  const { alertCategories, isAuthenticated, openAuthModal, language } = useAppState();
+  const { alertCategories: defaultAlertCategories, isAuthenticated, openAuthModal, language } = useAppState();
   const t = useTranslation();
+  
+  // State for sync stats
+  const [syncStats, setSyncStats] = useState<{
+    important_emails: number;
+    missed_emails: number;
+    payments_bills: number;
+    invoices: number;
+    subscriptions: number;
+    upcoming_meetings: number;
+  } | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   
   // Helper function to translate category names
   const getCategoryName = (categoryId: string): string => {
@@ -145,6 +157,7 @@ const SyncPage = () => {
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | GmailEmail | EmailQueueItem | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: "agent", text: "Tell me how you'd like to change or edit the draft." },
@@ -286,9 +299,107 @@ const SyncPage = () => {
     return mockEvents;
   }, [selectedDate]);
 
-  // Use demo mode when calendar is not connected
-  const showDemoCalendar = !isCalendarConnected;
-  const displayEvents = isCalendarConnected ? events : mockCalendarEvents;
+  // Get current user and account mode for demo mode check (must be defined before shouldUseDemoMode)
+  const { hasAccess, isLoading: accessLoading } = useAgentAccess("sync");
+  const { stats, loading, error } = useAgentStats();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { mode: accountMode } = useAccountMode();
+  
+  useEffect(() => {
+    supabaseBrowserClient.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUser(user);
+    });
+  }, []);
+  
+  // Check if we should use demo mode
+  // Demo data is shown for: unauthenticated users, authenticated users in 'preview' mode
+  // Demo data is removed for: authenticated users with 'trial-active', 'trial-expired', or 'subscribed'
+  const shouldUseDemoMode = useMemo(() => {
+    return isDemoMode(currentUser, accountMode);
+  }, [currentUser, accountMode]);
+
+  // Function to fetch sync stats
+  const fetchSyncStats = useCallback(async () => {
+    if (shouldUseDemoMode || !isAuthenticated) {
+      setSyncStats(null);
+      return;
+    }
+
+    setIsLoadingStats(true);
+    try {
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) {
+        setIsLoadingStats(false);
+        return;
+      }
+
+      const response = await fetch("/api/sync/stats", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.ok && result.data) {
+          setSyncStats(result.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching sync stats:", error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, [shouldUseDemoMode, isAuthenticated]);
+
+  // Fetch sync stats on mount and when dependencies change
+  useEffect(() => {
+    fetchSyncStats();
+  }, [fetchSyncStats]);
+
+  // Update alert categories with real counts for verified users, or use demo counts for demo mode
+  const alertCategories = useMemo(() => {
+    if (shouldUseDemoMode || !syncStats) {
+      // Use demo counts from default categories
+      return defaultAlertCategories;
+    }
+
+    // Update categories with real counts
+    return defaultAlertCategories.map((category) => {
+      let count = category.count; // Default to demo count if no match
+      
+      switch (category.id) {
+        case "important":
+          count = syncStats.important_emails;
+          break;
+        case "missed":
+          count = syncStats.missed_emails;
+          break;
+        case "payments":
+          count = syncStats.payments_bills;
+          break;
+        case "invoices":
+          count = syncStats.invoices;
+          break;
+        case "meetings":
+          count = syncStats.upcoming_meetings;
+          break;
+        case "subscriptions":
+          count = syncStats.subscriptions;
+          break;
+      }
+
+      return {
+        ...category,
+        count,
+      };
+    });
+  }, [shouldUseDemoMode, syncStats, defaultAlertCategories]);
+
+  // For authenticated users, never show demo calendar events
+  // Only show demo calendar if user is not authenticated AND demo mode is explicitly enabled
+  const showDemoCalendar = !isCalendarConnected && shouldUseDemoMode;
+  const displayEvents = isCalendarConnected ? events : (shouldUseDemoMode ? mockCalendarEvents : []);
 
   // Demo custom alerts state (persists during demo mode)
   const [demoAlertsState, setDemoAlertsState] = useState<CustomAlert[]>([]);
@@ -388,39 +499,44 @@ const SyncPage = () => {
     }
   }, [showDemoCalendar, demoCustomAlerts, demoAlertsState.length]);
 
-  // Combine user custom alerts with demo alerts (use state if available, otherwise use memoized)
+  // For authenticated users, never show demo alerts
+  // Only combine demo alerts if demo mode is explicitly enabled
   const allCustomAlerts = useMemo(() => {
-    return showDemoCalendar 
-      ? [...(demoAlertsState.length > 0 ? demoAlertsState : demoCustomAlerts), ...customAlerts]
-      : customAlerts;
-  }, [showDemoCalendar, demoAlertsState, demoCustomAlerts, customAlerts]);
-
-  const { hasAccess, isLoading: accessLoading } = useAgentAccess("sync");
-  const { stats, loading, error } = useAgentStats();
+    if (showDemoCalendar && shouldUseDemoMode) {
+      return [...(demoAlertsState.length > 0 ? demoAlertsState : demoCustomAlerts), ...customAlerts];
+    }
+    return customAlerts;
+  }, [showDemoCalendar, shouldUseDemoMode, demoAlertsState, demoCustomAlerts, customAlerts]);
   
   // Wait for access to be determined before showing stats to prevent flashing
   const isAccessReady = !accessLoading;
   
-  // Use preview/mock data if user doesn't have access (only after access check is complete)
-  const isPreview = isAccessReady && !hasAccess;
+  // Use preview mode only if user doesn't have access (not for demo mode)
+  const isPreview = isAccessReady && !hasAccess && !shouldUseDemoMode;
   
-  // Fallback to realistic random numbers if no stats available or in preview mode
-  // Only show fallback stats when access check is complete to prevent number flashing
-  const fallbackStats = useMemo(() => {
+  // For authenticated users, always use real stats (or empty stats if no data)
+  // Never show fake numbers for authenticated users
+  const latestStats = useMemo(() => {
     if (!isAccessReady) {
       // Return empty stats while loading to prevent flash
       return emptyAgentStats;
     }
-    return {
-      ...emptyAgentStats,
-      xi_important_emails: isPreview ? 12 : 18,
-      xi_payments_bills: isPreview ? 4 : 7,
-      xi_invoices: isPreview ? 2 : 4,
-      xi_missed_emails: isPreview ? 2 : 3,
-    };
-  }, [isPreview, isAccessReady]);
+    
+    // If we have real stats, use them
+    if (stats) {
+      return stats;
+    }
+    
+    // If no stats and user is authenticated, return empty stats (0s)
+    // Only use fallback for preview mode (unauthenticated users)
+    if (isPreview) {
+      return emptyAgentStats;
+    }
+    
+    // For authenticated users with no stats yet, return empty stats
+    return emptyAgentStats;
+  }, [stats, isAccessReady, isPreview]);
   
-  const latestStats = stats ?? fallbackStats;
   const noStats = !stats && !loading && !error;
   
   const agentConfig = AGENT_BY_ID["sync"];
@@ -437,7 +553,40 @@ const SyncPage = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("gmail_connected") === "true") {
       setIsGmailConnected(true);
-      loadGmailEmails();
+      // Trigger initial sync when Gmail is first connected
+      const triggerInitialSync = async () => {
+        try {
+          const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+          if (!session?.access_token) return;
+          
+          // Trigger initial sync in the background
+          await fetch("/api/gmail/sync", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ type: "initial" }),
+          });
+          
+          // Wait a bit for sync to start, then load emails
+          setTimeout(async () => {
+            await loadGmailEmails();
+            await checkGmailConnection();
+            // Refetch stats after initial sync
+            await fetchSyncStats();
+          }, 2000);
+        } catch (error) {
+          console.error("Error triggering initial sync:", error);
+          // Still load emails even if sync fails
+          await loadGmailEmails();
+          await checkGmailConnection();
+          // Refetch stats even if sync fails
+          await fetchSyncStats();
+        }
+      };
+      
+      triggerInitialSync();
       window.history.replaceState({}, "", "/sync");
     }
     if (params.get("calendar_connected") === "true") {
@@ -482,17 +631,25 @@ const SyncPage = () => {
         errorMessage += "4. Under 'Authorized redirect URIs', add the EXACT redirect URI shown in step 1\n";
         errorMessage += "5. Make sure there are NO trailing slashes\n";
         errorMessage += "6. Save and try again";
-      } else if (error === "token_exchange_failed" || error.includes("token_exchange") || error.includes("invalid_client")) {
-        errorMessage = "OAuth Configuration Error\n\n";
+      } else if (error === "token_exchange_failed" || error.includes("token_exchange") || error.includes("invalid_client") || error.includes("Gmail OAuth client configuration")) {
+        errorMessage = "Gmail OAuth Configuration Error\n\n";
         errorMessage += "This usually means:\n";
         errorMessage += "1. The redirect URI doesn't match Google Cloud Console\n";
-        errorMessage += "2. The Client ID or Secret is incorrect\n";
-        errorMessage += "3. The authorization code expired\n\n";
+        errorMessage += "2. The Client ID or Secret is incorrect or missing\n";
+        errorMessage += "3. The OAuth client doesn't exist in Google Cloud Console\n";
+        errorMessage += "4. The authorization code expired\n\n";
+        errorMessage += "IMPORTANT: Gmail OAuth is SEPARATE from Supabase Google login.\n";
+        errorMessage += "You need separate OAuth credentials for Gmail integration.\n\n";
         errorMessage += "Fix:\n";
         errorMessage += "1. Visit /api/gmail/check-config to see your current redirect URI\n";
-        errorMessage += "2. Make sure this EXACT URI is in Google Cloud Console\n";
-        errorMessage += "3. Verify GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in .env.local\n";
-        errorMessage += "4. Restart your dev server";
+        errorMessage += "2. Go to: https://console.cloud.google.com/apis/credentials\n";
+        errorMessage += "3. Create or select OAuth 2.0 Client ID (type: Web application)\n";
+        errorMessage += "4. Add the EXACT redirect URI from step 1 to 'Authorized redirect URIs'\n";
+        errorMessage += "5. Copy the Client ID and Client Secret\n";
+        errorMessage += "6. Set in .env.local:\n";
+        errorMessage += "   GMAIL_CLIENT_ID=<your_client_id>\n";
+        errorMessage += "   GMAIL_CLIENT_SECRET=<your_client_secret>\n";
+        errorMessage += "7. Restart your dev server";
         if (errorDetails) {
           errorMessage += "\n\nDetails: " + errorDetails;
         }
@@ -611,8 +768,8 @@ const SyncPage = () => {
       const { data: { session } } = await supabaseBrowserClient.auth.getSession();
       if (!session?.access_token) return;
 
-      // Check sync status (which also checks connection)
-      const res = await fetch("/api/gmail/sync", {
+      // Check Gmail connection status using dedicated endpoint
+      const res = await fetch("/api/gmail/status", {
         headers: { 
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -627,6 +784,10 @@ const SyncPage = () => {
           loadGmailEmails();
         }
       } else if (res.status === 401) {
+        setIsGmailConnected(false);
+        setSyncStatus({ connected: false });
+      } else {
+        // If status endpoint fails, assume not connected
         setIsGmailConnected(false);
         setSyncStatus({ connected: false });
       }
@@ -726,7 +887,16 @@ const SyncPage = () => {
             "See GMAIL_SETUP.md for detailed instructions."
           );
         } else {
-          alert(`Failed to connect Gmail: ${errorMsg}${details}\n\nVisit /api/gmail/test to check your configuration.`);
+          // Show user-friendly error message
+          const userMessage = errorMsg.includes("invalid_client") 
+            ? "We couldn't connect to Gmail. Please check your Gmail connection settings.\n\n" +
+              "This usually means:\n" +
+              "1. The OAuth client ID doesn't match Google Cloud Console\n" +
+              "2. The redirect URI doesn't match exactly\n" +
+              "3. Gmail OAuth credentials are missing or incorrect\n\n" +
+              "Visit /api/gmail/check-config to verify your configuration."
+            : `We couldn't connect to Gmail: ${errorMsg}${details}\n\nVisit /api/gmail/test to check your configuration.`;
+          alert(userMessage);
         }
         return;
       }
@@ -840,6 +1010,10 @@ const SyncPage = () => {
         // Refresh sync status and emails
         await checkGmailConnection();
         await loadGmailEmails();
+        
+        // Refetch stats to update alert category counts
+        await fetchSyncStats();
+        
         return result;
       } else {
         throw new Error("Sync failed");
@@ -849,6 +1023,50 @@ const SyncPage = () => {
       throw error;
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      if (!isAuthenticated || isRefreshing) return;
+      
+      setIsRefreshing(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) {
+        setIsRefreshing(false);
+        return;
+      }
+
+      // Trigger Gmail sync
+      const res = await fetch("/api/gmail/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ type: "incremental" }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Gmail sync failed");
+      }
+
+      const result = await res.json();
+      
+      // Refresh sync status and email queue
+      await checkGmailConnection();
+      await loadGmailEmails();
+      
+      // Refetch stats to update alert category counts
+      await fetchSyncStats();
+      
+      return result;
+    } catch (error: any) {
+      console.error("Error refreshing inbox:", error);
+      alert("Gmail sync failed. Please try again.");
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -940,18 +1158,28 @@ const SyncPage = () => {
   };
 
   // Email handlers
-  const displayEmails = isGmailConnected && gmailEmails.length > 0 
-    ? gmailEmails.map((email) => ({
+  // For authenticated users, only show real emails from email queue
+  // Never show mock/demo emails for authenticated users
+  const displayEmails = useMemo(() => {
+    // If user is authenticated, only show real emails (never mock data)
+    if (isAuthenticated && !shouldUseDemoMode) {
+      return gmailEmails.map((email) => ({
         id: email.id,
         sender: email.sender,
+        fromAddress: email.fromAddress,
         subject: email.subject,
         timestamp: new Date(email.timestamp).toLocaleDateString(),
         categoryId: email.categoryId || "other",
         status: email.status || "needs_reply",
         snippet: email.snippet,
         draft: email.draft || "",
-      }))
-    : mockEmails;
+      }));
+    }
+    
+    // For preview mode (unauthenticated), return empty array
+    // Demo mode is disabled, so we don't show mock emails
+    return [];
+  }, [gmailEmails, isAuthenticated, shouldUseDemoMode]);
 
   const filteredEmails = useMemo(() => {
     if (!activeCategory) return displayEmails;
@@ -1521,34 +1749,45 @@ const SyncPage = () => {
                     )}
                   </button>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      if (!isAuthenticated) return;
-                      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-                      if (!session?.access_token) return;
-                      
-                      if (confirm("Are you sure you want to disconnect Gmail? Your email queue will remain but won't sync.")) {
-                        try {
-                          const res = await fetch("/api/gmail/disconnect", {
-                            method: "DELETE",
-                            headers: { Authorization: `Bearer ${session.access_token}` },
-                          });
-                          if (res.ok) {
-                            setIsGmailConnected(false);
-                            setSyncStatus(null);
-                            setEmailQueueItems([]);
-                            setGmailEmails([]);
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Connected to Gmail
+                      {syncStatus?.lastSyncAt && (
+                        <span className="text-xs opacity-70">
+                          (Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!isAuthenticated) return;
+                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                        if (!session?.access_token) return;
+                        
+                        if (confirm("Are you sure you want to disconnect Gmail? Your email queue will remain but won't sync.")) {
+                          try {
+                            const res = await fetch("/api/gmail/disconnect", {
+                              method: "DELETE",
+                              headers: { Authorization: `Bearer ${session.access_token}` },
+                            });
+                            if (res.ok) {
+                              setIsGmailConnected(false);
+                              setSyncStatus(null);
+                              setEmailQueueItems([]);
+                              setGmailEmails([]);
+                            }
+                          } catch (error) {
+                            console.error("Error disconnecting:", error);
                           }
-                        } catch (error) {
-                          console.error("Error disconnecting:", error);
                         }
-                      }
-                    }}
-                    className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
-                  >
-                    <X className="h-4 w-4" />
-                    Disconnect
-                  </button>
+                      }}
+                      className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+                    >
+                      <X className="h-4 w-4" />
+                      Disconnect
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1596,31 +1835,53 @@ const SyncPage = () => {
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-              {alertCategories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setActiveCategory((prev) => (prev === category.id ? null : category.id))}
-                  style={{ backgroundColor: category.color }}
-                  className={`rounded-2xl p-3 text-left text-sm font-semibold text-white shadow-sm transition ${
-                    activeCategory === category.id ? "ring-2 ring-white/70" : "opacity-90"
-                  }`}
-                >
-                  <p>{getCategoryName(category.id)}</p>
-                  <p className="text-xs opacity-80">{category.count} {t("alerts")}</p>
-                </button>
-              ))}
-            </section>
+            {/* Only show alert categories for verified users with real data */}
+            {!shouldUseDemoMode && syncStats && (
+              <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+                {alertCategories
+                  .filter((category) => category.count > 0)
+                  .map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => setActiveCategory((prev) => (prev === category.id ? null : category.id))}
+                      style={{ backgroundColor: category.color }}
+                      className={`rounded-2xl p-3 text-left text-sm font-semibold text-white shadow-sm transition ${
+                        activeCategory === category.id ? "ring-2 ring-white/70" : "opacity-90"
+                      }`}
+                    >
+                      <p>{getCategoryName(category.id)}</p>
+                      <p className="text-xs opacity-80">
+                        {category.count} {category.count === 1 ? t("alert") : t("alerts")}
+                      </p>
+                    </button>
+                  ))}
+              </section>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
               <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold">{t("syncEmailQueue")}</h2>
-                  {activeCategory && (
-                    <button onClick={() => setActiveCategory(null)} className="text-xs uppercase tracking-wide text-brand-accent">
-                      {t("syncClearFilter")}
+                  <div className="flex items-center gap-2">
+                    {activeCategory && (
+                      <button onClick={() => setActiveCategory(null)} className="text-xs uppercase tracking-wide text-brand-accent">
+                        {t("syncClearFilter")}
+                      </button>
+                    )}
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isRefreshing || !isGmailConnected}
+                      className="p-2 hover:bg-white/5 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Refresh inbox"
+                      title="Refresh inbox"
+                    >
+                      {isRefreshing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4" />
+                      )}
                     </button>
-                  )}
+                  </div>
                 </div>
                 <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
                   {isLoadingEmails ? (
@@ -1629,8 +1890,38 @@ const SyncPage = () => {
                       <span className="ml-2 text-sm text-slate-500">{t("syncLoadingEmails")}</span>
                     </div>
                   ) : filteredEmails.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-slate-500">
-                      {isGmailConnected ? t("syncNoEmailsFound") : t("syncConnectGmailToView")}
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-slate-500 mb-4">
+                        {isGmailConnected 
+                          ? "Gmail is connected, but there are no emails to show yet." 
+                          : t("syncConnectGmailToView")}
+                      </p>
+                      {isGmailConnected && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await triggerSync();
+                            } catch (error) {
+                              console.error("Sync failed:", error);
+                              alert("Failed to sync emails. Please try again.");
+                            }
+                          }}
+                          disabled={isSyncing}
+                          className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                        >
+                          {isSyncing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Syncing...
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="h-4 w-4" />
+                              Sync now
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     filteredEmails.map((email) => (
@@ -1766,13 +2057,7 @@ const SyncPage = () => {
             </div>
 
             <div className="space-y-6">
-              {showDemoCalendar && (
-                <div className="rounded-3xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-                  <p className="text-sm text-amber-800 dark:text-amber-300">
-                    <span className="font-semibold">Demo Mode:</span> Showing sample calendar events. Connect your Google Calendar to see your real events.
-                  </p>
-                </div>
-              )}
+              {/* Demo mode banner removed - demo mode is disabled for authenticated users */}
                 <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
                   <button
                     onClick={() => {

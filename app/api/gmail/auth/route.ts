@@ -2,39 +2,114 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { getOAuthRedirectUri } from "@/lib/oauth-helpers";
 
-// Gmail OAuth configuration
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID || "";
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || "";
+/**
+ * Gmail OAuth Authorization Endpoint
+ * 
+ * This endpoint generates the Google OAuth authorization URL for Gmail integration.
+ * 
+ * IMPORTANT: This is SEPARATE from Supabase Google authentication:
+ * - Supabase Google login: Uses Supabase's OAuth client (configured in Supabase dashboard)
+ * - Gmail OAuth: Uses GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET (configured in Google Cloud Console)
+ * 
+ * These are two different OAuth clients and should NOT be mixed.
+ * 
+ * Google Cloud Console Setup Checklist:
+ * 
+ * 1. Go to https://console.cloud.google.com/apis/credentials
+ * 2. Create or select OAuth 2.0 Client ID
+ * 3. Application type: "Web application"
+ * 4. Enable Gmail API in the project:
+ *    - Go to APIs & Services → Library
+ *    - Search for "Gmail API"
+ *    - Click "Enable"
+ * 5. Add authorized redirect URIs (EXACT match required, no trailing slashes):
+ *    - Development: http://localhost:3000/api/gmail/callback
+ *    - Production: https://ovrsee.ai/api/gmail/callback
+ * 6. Copy Client ID and Client Secret from the OAuth client
+ * 7. Set in .env.local:
+ *    - GMAIL_CLIENT_ID=1077385431224-armgjmsn38f1mj23m5l1q8j274ch80p2.apps.googleusercontent.com
+ *    - GMAIL_CLIENT_SECRET=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
+ *    - NEXT_PUBLIC_APP_URL=http://localhost:3000
+ * 8. Restart dev server after updating env vars (env vars only load on server start)
+ * 
+ * IMPORTANT: The redirect URI in Google Cloud Console MUST match exactly what this code generates.
+ * The code uses getBaseUrl() to construct: ${getBaseUrl()}/api/gmail/callback
+ * Verify the redirect URI by visiting /api/gmail/check-config
+ * 
+ * Scopes requested:
+ * - https://www.googleapis.com/auth/gmail.readonly (read emails)
+ * - https://www.googleapis.com/auth/gmail.modify (modify emails, send, etc.)
+ */
+
+// Gmail OAuth configuration - validate at module load time
+function getGmailClientId(): string {
+  const clientId = process.env.GMAIL_CLIENT_ID || "";
+  
+  // Fail loudly if missing or placeholder
+  if (!clientId || clientId === "your_gmail_client_id_here" || clientId.includes("your_")) {
+    throw new Error(
+      "GMAIL_CLIENT_ID is not configured. " +
+      "Please set GMAIL_CLIENT_ID in your .env.local file with a valid Client ID from Google Cloud Console. " +
+      "See app/api/gmail/auth/route.ts for setup instructions."
+    );
+  }
+  
+  // Validate format (should be 50+ characters, ends with .apps.googleusercontent.com)
+  if (clientId.length < 20) {
+    throw new Error(
+      `GMAIL_CLIENT_ID appears invalid (too short: ${clientId.length} chars). ` +
+      "Expected format: <numbers>-<string>.apps.googleusercontent.com"
+    );
+  }
+  
+  return clientId;
+}
+
+function getGmailClientSecret(): string {
+  const secret = process.env.GMAIL_CLIENT_SECRET || "";
+  
+  // Fail loudly if missing or placeholder
+  if (!secret || secret === "your_gmail_client_secret_here" || secret.includes("your_")) {
+    throw new Error(
+      "GMAIL_CLIENT_SECRET is not configured. " +
+      "Please set GMAIL_CLIENT_SECRET in your .env.local file with a valid Client Secret from Google Cloud Console. " +
+      "See app/api/gmail/auth/route.ts for setup instructions."
+    );
+  }
+  
+  // Validate format (should be 20+ characters)
+  if (secret.length < 20) {
+    throw new Error(
+      `GMAIL_CLIENT_SECRET appears invalid (too short: ${secret.length} chars). ` +
+      "Please check your .env.local file."
+    );
+  }
+  
+  return secret;
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate client ID is configured
-    if (!GMAIL_CLIENT_ID || GMAIL_CLIENT_ID === "your_gmail_client_id_here" || GMAIL_CLIENT_ID.includes("your_")) {
+    // Validate and get client ID (throws if invalid)
+    let GMAIL_CLIENT_ID: string;
+    try {
+      GMAIL_CLIENT_ID = getGmailClientId();
+    } catch (error: any) {
+      console.error("[Gmail OAuth] Configuration error:", error.message);
       return NextResponse.json(
         { 
           error: "Gmail OAuth is not configured",
-          details: "GMAIL_CLIENT_ID is not set or contains placeholder value. Please set a valid Client ID from Google Cloud Console.",
+          details: error.message,
           setupRequired: true
         },
         { status: 500 }
       );
     }
     
-    // Validate client ID format (should be a long string, not a placeholder)
-    if (GMAIL_CLIENT_ID.length < 20) {
-      return NextResponse.json(
-        { 
-          error: "Invalid Gmail Client ID",
-          details: "GMAIL_CLIENT_ID appears to be invalid (too short). Please check your .env.local file.",
-          setupRequired: true
-        },
-        { status: 500 }
-      );
-    }
-    
-    // Log the exact Client ID being used for debugging
-    console.log("[Gmail OAuth] Using Client ID:", GMAIL_CLIENT_ID.substring(0, 30) + "...");
+    // Log client ID info for debugging (not the full value)
+    console.log("[Gmail OAuth] Client ID configured:", GMAIL_CLIENT_ID.substring(0, 20) + "...");
     console.log("[Gmail OAuth] Client ID length:", GMAIL_CLIENT_ID.length);
+    console.log("[Gmail OAuth] Client ID format valid:", GMAIL_CLIENT_ID.includes(".apps.googleusercontent.com"));
 
     const supabase = getSupabaseServerClient();
     const authHeader = request.headers.get("authorization");
@@ -79,6 +154,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get redirect URI using shared helper to ensure consistency
+    // This uses getBaseUrl() internally for environment-aware URL resolution
     const cleanRedirectUri = getOAuthRedirectUri(
       { url: request.url, headers: request.headers },
       "/api/gmail/callback",
@@ -92,13 +168,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { 
           error: "Invalid redirect URI configuration",
-          details: `Redirect URI "${cleanRedirectUri}" is not a valid URL. Please set GMAIL_REDIRECT_URI in environment variables.`
+          details: `Redirect URI "${cleanRedirectUri}" is not a valid URL. ` +
+                   `Please set GMAIL_REDIRECT_URI in environment variables or ensure NEXT_PUBLIC_APP_URL is set correctly.`
         },
         { status: 500 }
       );
     }
 
-    // Generate OAuth URL
+    // Generate OAuth URL with Gmail scopes
+    // Scopes requested:
+    // - gmail.readonly: Read emails and metadata
+    // - gmail.modify: Modify emails, send, delete, etc.
     const scopes = [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.modify",
@@ -109,21 +189,20 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set("redirect_uri", cleanRedirectUri);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", scopes);
-    authUrl.searchParams.set("access_type", "offline");
-    authUrl.searchParams.set("prompt", "consent");
+    authUrl.searchParams.set("access_type", "offline"); // Required for refresh token
+    authUrl.searchParams.set("prompt", "consent"); // Force consent screen to get refresh token
     authUrl.searchParams.set("state", userId); // Pass user ID in state for callback
     
-    // Log the exact redirect URI being used for debugging
-    console.log("[Gmail OAuth] Redirect URI being used:", cleanRedirectUri);
-    console.log("[Gmail OAuth] Client ID:", GMAIL_CLIENT_ID.substring(0, 20) + "...");
-
-    // Log for debugging (remove in production)
+    // Log configuration for debugging (never log full secrets)
+    console.log("[Gmail OAuth] Configuration:");
+    console.log("  - Client ID:", GMAIL_CLIENT_ID.substring(0, 20) + "... (length: " + GMAIL_CLIENT_ID.length + ")");
+    console.log("  - Redirect URI:", cleanRedirectUri);
+    console.log("  - Scopes:", scopes);
+    console.log("  - User ID:", userId.substring(0, 8) + "...");
+    
+    // Additional debug info in development
     if (process.env.NODE_ENV !== "production") {
-      console.log("Gmail OAuth URL generated:", {
-        clientId: GMAIL_CLIENT_ID ? "***configured***" : "MISSING",
-        redirectUri: cleanRedirectUri,
-        userId,
-      });
+      console.log("[Gmail OAuth] Full auth URL:", authUrl.toString().replace(GMAIL_CLIENT_ID, "CLIENT_ID_REDACTED"));
     }
 
     return NextResponse.json({

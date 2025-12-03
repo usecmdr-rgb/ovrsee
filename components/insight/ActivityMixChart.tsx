@@ -1,92 +1,93 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { ActivityMixResponse, TimeRange } from "@/types";
+import { useMemo } from "react";
+import type { TimeRange } from "@/types";
+import { useAgentAccess } from "@/hooks/useAgentAccess";
+import { useAccountMode } from "@/hooks/useAccountMode";
 import TrialExpiredLock from "./TrialExpiredLock";
 
 interface ActivityMixChartProps {
   range: TimeRange;
   isPreview?: boolean;
+  overviewData?: {
+    timeseries?: {
+      dates: string[];
+      callsTotal: number[];
+      emailsReceivedTotal: number[];
+    };
+  } | null;
+  overviewLoading?: boolean;
+  overviewError?: string | null;
 }
 
 // Mock data for demo mode
-const getMockActivityData = (range: TimeRange): ActivityMixResponse => {
+const getMockActivityData = (range: TimeRange) => {
   if (range === "daily") {
-    return {
-      range: "daily",
-      buckets: Array.from({ length: 24 }, (_, i) => ({
-        label: `${i.toString().padStart(2, "0")}:00`,
-        calls: Math.floor(Math.random() * 5) + 2,
-        emails: Math.floor(Math.random() * 3) + 1,
-      })),
-    };
+    return Array.from({ length: 24 }, (_, i) => ({
+      label: `${i.toString().padStart(2, "0")}:00`,
+      calls: Math.floor(Math.random() * 5) + 2,
+      emails: Math.floor(Math.random() * 3) + 1,
+    }));
   } else if (range === "weekly") {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    return {
-      range: "weekly",
-      buckets: days.map((day) => ({
-        label: day,
-        calls: Math.floor(Math.random() * 15) + 10,
-        emails: Math.floor(Math.random() * 10) + 5,
-      })),
-    };
+    return days.map((day) => ({
+      label: day,
+      calls: Math.floor(Math.random() * 15) + 10,
+      emails: Math.floor(Math.random() * 10) + 5,
+    }));
   } else {
-    return {
-      range: "monthly",
-      buckets: Array.from({ length: 4 }, (_, i) => ({
-        label: `W${i + 1}`,
-        calls: Math.floor(Math.random() * 50) + 30,
-        emails: Math.floor(Math.random() * 30) + 15,
-      })),
-    };
+    return Array.from({ length: 4 }, (_, i) => ({
+      label: `W${i + 1}`,
+      calls: Math.floor(Math.random() * 50) + 30,
+      emails: Math.floor(Math.random() * 30) + 15,
+    }));
   }
 };
 
-export default function ActivityMixChart({ range, isPreview = false }: ActivityMixChartProps) {
-  const [data, setData] = useState<ActivityMixResponse | null>(isPreview ? getMockActivityData(range) : null);
-  const [loading, setLoading] = useState(!isPreview);
-  const [error, setError] = useState<string | null>(null);
-  const [isUnauthorized, setIsUnauthorized] = useState(false);
-
-  const fetchData = useCallback(async () => {
+export default function ActivityMixChart({ 
+  range, 
+  isPreview = false,
+  overviewData,
+  overviewLoading = false,
+  overviewError = null,
+}: ActivityMixChartProps) {
+  const { isSuperAdmin } = useAgentAccess();
+  const { mode: accountMode } = useAccountMode();
+  
+  // Don't show trial expired lock for super admins or users with active subscriptions/trials
+  const shouldShowTrialLock = false; // Simplified - no longer needed with new backend
+  
+  // Convert overview timeseries data to chart buckets
+  const buckets = useMemo(() => {
     if (isPreview) {
-      setData(getMockActivityData(range));
-      setLoading(false);
-      return;
+      return getMockActivityData(range);
     }
-    setLoading(true);
-    setError(null);
-    setIsUnauthorized(false);
-
-    try {
-      const response = await fetch(`/api/insight/activity-mix?range=${range}`);
-      const result = await response.json();
-
-      if (result.ok) {
-        setData(result.data);
-      } else {
-        const isAuthError = response.status === 401 || result.error === "Unauthorized";
-        setIsUnauthorized(isAuthError);
-        if (!isAuthError) {
-          setError(result.error || "Failed to fetch activity data");
+    
+    if (overviewData?.timeseries) {
+      const { dates, callsTotal, emailsReceivedTotal } = overviewData.timeseries;
+      return dates.map((date, idx) => {
+        const dateObj = new Date(date);
+        let label: string;
+        if (range === "daily") {
+          label = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        } else if (range === "weekly") {
+          label = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+        } else {
+          label = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
         }
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch activity data");
-    } finally {
-      setLoading(false);
+        return {
+          label,
+          calls: callsTotal[idx] || 0,
+          emails: emailsReceivedTotal[idx] || 0,
+        };
+      });
     }
-  }, [range, isPreview]);
+    
+    return [];
+  }, [overviewData, range, isPreview]);
 
-  useEffect(() => {
-    if (isPreview) {
-      setData(getMockActivityData(range));
-      setLoading(false);
-      setError(null);
-      return;
-    }
-    fetchData();
-  }, [fetchData, range, isPreview]);
+  const loading = overviewLoading;
+  const error = overviewError;
 
   if (loading) {
     return (
@@ -99,11 +100,24 @@ export default function ActivityMixChart({ range, isPreview = false }: ActivityM
     );
   }
 
-  if (isUnauthorized) {
+  if (shouldShowTrialLock) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
         <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
         <TrialExpiredLock />
+      </div>
+    );
+  }
+  
+  if (isUnauthorized && !shouldShowTrialLock) {
+    // If unauthorized but shouldn't show trial lock (super admin or active subscription),
+    // show a generic error or empty state
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+        <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
+        <div className="h-32 flex items-center justify-center text-sm text-slate-500">
+          No data available
+        </div>
       </div>
     );
   }
@@ -112,14 +126,14 @@ export default function ActivityMixChart({ range, isPreview = false }: ActivityM
     return (
       <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
         <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
-        <div className="h-32 flex items-center justify-center text-sm text-red-500">
-          {error}
+        <div className="h-32 flex items-center justify-center text-sm text-slate-500">
+          Insights temporarily unavailable
         </div>
       </div>
     );
   }
 
-  if (!data || data.buckets.length === 0) {
+  if (buckets.length === 0) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
         <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
@@ -132,7 +146,7 @@ export default function ActivityMixChart({ range, isPreview = false }: ActivityM
 
   // Calculate max value for scaling
   const maxValue = Math.max(
-    ...data.buckets.map((b) => Math.max(b.calls, b.emails)),
+    ...buckets.map((b) => Math.max(b.calls, b.emails)),
     1
   );
 
@@ -140,8 +154,8 @@ export default function ActivityMixChart({ range, isPreview = false }: ActivityM
     <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
       <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
       <div className="mt-2">
-        <div className="grid h-32 items-end gap-2" style={{ gridTemplateColumns: `repeat(${data.buckets.length}, minmax(0, 1fr))` }}>
-          {data.buckets.map((bucket, index) => {
+        <div className="grid h-32 items-end gap-2" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
+          {buckets.map((bucket, index) => {
             const callsHeight = (bucket.calls / maxValue) * 100;
             const emailsHeight = (bucket.emails / maxValue) * 100;
             

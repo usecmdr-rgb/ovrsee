@@ -133,3 +133,5 @@ Run the SQL in `lib/calendar/database-schema.sql` to:
 - Soft delete allows recovery within 60-day window
 - Two-way sync maintains data consistency between OVRSEE and Google
 
+
+

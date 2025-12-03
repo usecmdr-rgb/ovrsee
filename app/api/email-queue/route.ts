@@ -75,8 +75,11 @@ export async function GET(request: NextRequest) {
     const { data: emails, error } = await query;
 
     if (error) {
+      console.error(`[Email Queue] Error fetching emails for user_id ${userId}:`, error);
       throw error;
     }
+
+    console.log(`[Email Queue] Fetched ${emails?.length || 0} emails for user_id: ${userId}`);
 
     return NextResponse.json({
       emails: emails || [],

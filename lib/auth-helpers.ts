@@ -105,6 +105,7 @@ export async function requireAuthAndMatchUserId(userId: string): Promise<User> {
 /**
  * Get authenticated Supabase client from a Next.js request
  * Useful for route handlers that need access to the request object
+ * Returns: { supabaseClient, user, responseHeaders }
  */
 export async function getAuthenticatedSupabaseFromRequest(
   request: NextRequest
@@ -152,7 +153,21 @@ export async function getAuthenticatedSupabaseFromRequest(
     },
   });
 
-  return { supabase, response };
+  // Get authenticated user
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Unauthorized: Authentication required");
+  }
+
+  return {
+    supabaseClient: supabase,
+    user,
+    responseHeaders: response.headers,
+  };
 }
 
 /**
@@ -162,16 +177,7 @@ export async function getAuthenticatedUserFromRequest(
   request: NextRequest
 ): Promise<User | null> {
   try {
-    const { supabase } = await getAuthenticatedSupabaseFromRequest(request);
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return null;
-    }
-
+    const { user } = await getAuthenticatedSupabaseFromRequest(request);
     return user;
   } catch (error) {
     console.error("Error getting authenticated user from request:", error);

@@ -13,3 +13,5 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_stripe_subscription_id ON workspaces(s
 COMMENT ON COLUMN workspaces.stripe_customer_id IS 'Stripe customer ID for workspace billing';
 COMMENT ON COLUMN workspaces.stripe_subscription_id IS 'Stripe subscription ID for workspace team seats';
 
+
+

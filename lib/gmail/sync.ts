@@ -33,6 +33,8 @@ export async function initialGmailSync(
   const { daysBack = 30, maxMessages = 500 } = options;
   const supabase = getSupabaseServerClient();
 
+  console.log(`[Gmail Sync] Starting initial sync for user_id: ${userId}, daysBack: ${daysBack}, maxMessages: ${maxMessages}`);
+
   // Check if Gmail is connected
   const { data: connection } = await supabase
     .from("gmail_connections")
@@ -41,8 +43,11 @@ export async function initialGmailSync(
     .single();
 
   if (!connection) {
+    console.error(`[Gmail Sync] No Gmail connection found for user_id: ${userId}`);
     throw new Error("Gmail not connected");
   }
+
+  console.log(`[Gmail Sync] Found Gmail connection for user_id: ${userId}`);
 
   // Calculate date for query
   const dateThreshold = new Date();
@@ -79,6 +84,7 @@ export async function initialGmailSync(
       }
 
       // Process messages in batches
+      console.log(`[Gmail Sync] Processing ${listResponse.messages.length} messages...`);
       for (const msgRef of listResponse.messages) {
         try {
           const message = await getGmailMessage(userId, msgRef.id, "full");
@@ -119,7 +125,7 @@ export async function initialGmailSync(
             );
 
           if (upsertError) {
-            console.error("Error upserting message:", upsertError);
+            console.error(`[Gmail Sync] Error upserting message ${message.id} for user_id ${userId}:`, upsertError);
             errors++;
           } else {
             // Check if it was an insert or update
@@ -137,7 +143,7 @@ export async function initialGmailSync(
             }
           }
         } catch (error: any) {
-          console.error(`Error processing message ${msgRef.id}:`, error);
+          console.error(`[Gmail Sync] Error processing message ${msgRef.id} for user_id ${userId}:`, error);
           errors++;
         }
       }
@@ -155,6 +161,8 @@ export async function initialGmailSync(
         sync_error: null,
       })
       .eq("user_id", userId);
+
+    console.log(`[Gmail Sync] Initial sync completed for user_id: ${userId}, synced: ${synced}, updated: ${updated}, errors: ${errors}`);
 
     return {
       synced,

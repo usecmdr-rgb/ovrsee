@@ -22,7 +22,10 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { seats } = body;
+    const { seats, billingInterval } = body as {
+      seats: SeatSelection[];
+      billingInterval?: 'monthly' | 'yearly';
+    };
 
     // Validate input
     if (!Array.isArray(seats)) {
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate pricing
-    const pricing = calculateTeamPricing(seats as SeatSelection[]);
+    const pricing = calculateTeamPricing(seats as SeatSelection[], billingInterval || 'monthly');
 
     return NextResponse.json(pricing);
   } catch (error: any) {
@@ -64,4 +67,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
 

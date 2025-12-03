@@ -9,3 +9,5 @@ COMMENT ON COLUMN aloha_profiles.aloha_self_name IS 'Custom name the agent calls
 
 
 
+
+

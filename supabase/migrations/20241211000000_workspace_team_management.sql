@@ -140,3 +140,5 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION create_workspace_for_user();
 
+
+

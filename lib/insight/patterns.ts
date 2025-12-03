@@ -120,3 +120,5 @@ export function detectTrend(values: number[]): 'up' | 'down' | 'flat' {
   return slope > 0 ? 'up' : 'down';
 }
 
+
+

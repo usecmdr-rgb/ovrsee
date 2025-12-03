@@ -84,7 +84,7 @@ function testMixedTierPricing() {
         { tier: 'advanced', count: 1 },
         { tier: 'elite', count: 1 },
       ],
-      expectedTotal: 2 * 39.99 + 99.99 + 159.99,
+      expectedTotal: 2 * 39.99 + 79.99 + 129.99, // Updated prices: Professional 79.99, Executive 129.99
       expectedDiscount: 0,
     },
     {
@@ -94,7 +94,7 @@ function testMixedTierPricing() {
         { tier: 'advanced', count: 2 },
         { tier: 'elite', count: 1 },
       ],
-      expectedTotal: (3 * 39.99 + 2 * 99.99 + 159.99) * 0.9,
+      expectedTotal: (3 * 39.99 + 2 * 79.99 + 129.99) * 0.9, // Updated prices: Professional 79.99, Executive 129.99
       expectedDiscount: 0.10,
     },
     {
@@ -106,7 +106,7 @@ function testMixedTierPricing() {
     {
       name: '20 seats (25% discount)',
       seats: [{ tier: 'elite', count: 20 }],
-      expectedTotal: 159.99 * 20 * 0.75,
+      expectedTotal: 129.99 * 20 * 0.75, // Updated price: Executive 129.99
       expectedDiscount: 0.25,
     },
   ];

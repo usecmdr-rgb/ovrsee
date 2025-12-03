@@ -109,3 +109,5 @@ export function getCategoryColor(category: string): string {
   return colors[category] || 'bg-slate-500';
 }
 
+
+

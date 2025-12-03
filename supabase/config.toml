@@ -6,6 +6,12 @@
 # - This file is used by the Supabase CLI only and is NOT loaded by the app
 #   at runtime. The app still reads environment variables from `.env.local`.
 #
+# CLI Authentication:
+# - The CLI uses the Supabase access token from `supabase login` for authentication.
+# - When applying migrations, the CLI uses the service_role_key (not anon_key)
+#   for privileged database operations.
+# - The anon_key is only used by frontend clients and is not relevant for CLI operations.
+#
 # After setting this, run:
 #   npx supabase login
 #   npx supabase link --project-ref YOUR_SUPABASE_PROJECT_ID
@@ -13,65 +19,7 @@
 
 project_id = "nupxbdbychuqokubresi"
 
-# NOTE:
-# We intentionally leave the [api] and [db] sections empty so that
-# `supabase link --project-ref ...` can populate them automatically.
-# The CLI will write the correct url/keys/DB settings for you based on
-# the linked project. You don't need to edit those by hand.
-
-# Supabase CLI project config
-#
-# IMPORTANT:
-# - Replace the project_id below with your actual Supabase project ref
-#   from the Supabase dashboard (Project Settings → General).
-# - This file is used by the Supabase CLI only and is NOT loaded by the app
-#   at runtime. The app still reads environment variables from `.env.local`.
-#
-# Example:
-#   project_id = "nupxbdbychuqokubresi"
-#
-# After setting this, run:
-#   supabase login
-#   supabase link --project-ref YOUR_SUPABASE_PROJECT_ID
-#
-
-project_id = "nupxbdbychuqokubresi"
-
-# NOTE:
-# We intentionally leave the [api] section empty here so that
-# `supabase link --project-ref ...` can populate it automatically.
-# The CLI will write the correct url / keys for you based on the
-# linked project. You don't need to edit that by hand.
-
-
 [db]
-# Local dev DB settings (used by `supabase start` if you choose to).
-# These can be left as defaults or adjusted later.
-port = 54322
-shadow_port = 54320
-major_version = 15
-
-# Supabase CLI project config
-# NOTE: Replace YOUR_SUPABASE_PROJECT_ID with the actual project ref from
-# the Supabase dashboard if it ever changes.
-#
-# This config is **project-wide** for the entire SaaS (Aloha, Sync, Insights,
-# Studio, etc.), not per agent.
-
-project_id = "nupxbdbychuqokubresi"
-
-[api]
-# Remote project API URL
-url = "https://nupxbdbychuqokubresi.supabase.co"
-
-# These keys are used by the Supabase CLI for admin operations like
-# `supabase db push` and `supabase db diff`. Do NOT expose them to clients.
-anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51cHhiZGJ5Y2h1cW9rdWJyZXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MzkxMzYsImV4cCI6MjA3OTIxNTEzNn0._NWnjQXYtRER5Z2D1wCuboHxan1OoRK9y0x0YXd7stc"
-service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51cHhiZGJ5Y2h1cW9rdWJyZXNpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzYzOTEzNiwiZXhwIjoyMDc5MjE1MTM2fQ.UuyAD5jKH8m2e6EWUAv9jYqOKTbt9_-l6us7C9bsxzs"
-
-[db]
-# Local dev DB settings (used by `supabase start` if you choose to).
-# These can be left as defaults or adjusted later.
 port = 54322
 shadow_port = 54320
 major_version = 15

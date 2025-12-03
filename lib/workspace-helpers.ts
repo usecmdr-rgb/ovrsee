@@ -3,12 +3,18 @@
  */
 
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Get workspace ID for a user (creates if doesn't exist)
+ * @param userId - The user ID
+ * @param supabaseClient - Optional authenticated Supabase client (for RLS). If not provided, uses service role client.
  */
-export async function getWorkspaceIdForUser(userId: string): Promise<string | null> {
-  const supabase = getSupabaseServerClient();
+export async function getWorkspaceIdForUser(
+  userId: string,
+  supabaseClient?: SupabaseClient
+): Promise<string | null> {
+  const supabase = supabaseClient || getSupabaseServerClient();
 
   // Get user's workspace (create if doesn't exist)
   let { data: workspace, error: workspaceError } = await supabase

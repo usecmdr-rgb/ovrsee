@@ -10,6 +10,9 @@ import { useAppState } from "@/context/AppStateContext";
 import { formatPrice } from "@/lib/currency";
 import { TIERS } from "@/lib/pricing";
 import type { TierId } from "@/lib/pricing";
+import { useBillingInterval } from "@/components/pricing/BillingIntervalContext";
+import { useStartCheckout } from "@/components/pricing/useStartCheckout";
+import type { CorePlanCode } from "@/lib/pricingConfig";
 
 interface PlanSeatSuggestion {
   tier: TierId;
@@ -57,6 +60,8 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
   const [needsVoice, setNeedsVoice] = useState(false);
   const [needsInsights, setNeedsInsights] = useState(false);
   const [budgetSensitivity, setBudgetSensitivity] = useState<"low" | "medium" | "high">("medium");
+  const { billingInterval } = useBillingInterval();
+  const { startCheckout } = useStartCheckout();
 
   const handleGetRecommendation = async () => {
     setLoading(true);
@@ -113,6 +118,26 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
     }
   };
 
+  const getRecommendedPlanCode = (seats: PlanSeatSuggestion[]): CorePlanCode => {
+    // Choose the highest tier present in the recommendation and map to CorePlanCode
+    if (seats.some((s) => s.tier === "elite" && s.count > 0)) {
+      return "executive";
+    }
+    if (seats.some((s) => s.tier === "advanced" && s.count > 0)) {
+      return "professional";
+    }
+    return "essentials";
+  };
+
+  const handleCheckoutRecommended = async (seats: PlanSeatSuggestion[]) => {
+    const planCode = getRecommendedPlanCode(seats);
+    try {
+      await startCheckout(planCode, billingInterval);
+    } catch (err) {
+      console.error("Failed to start checkout from PlanAdvisor:", err);
+    }
+  };
+
   if (mode === "workspace" && !isAuthenticated) {
     return null;
   }
@@ -155,13 +180,20 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">
               {recommendation.pricing.explanation}
             </p>
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-3">
               <Button
-                onClick={() => handleStartWithConfiguration(recommendation.suggestedSeats)}
+                onClick={() => handleCheckoutRecommended(recommendation.suggestedSeats)}
                 className="flex items-center"
               >
-                Start with this configuration
+                Start subscription
                 <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+              <Button
+                onClick={() => handleStartWithConfiguration(recommendation.suggestedSeats)}
+                variant="secondary"
+                className="flex items-center"
+              >
+                Configure team seats
               </Button>
             </div>
           </div>

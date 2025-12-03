@@ -3,6 +3,12 @@ import { stripe } from "@/lib/stripe";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import Stripe from "stripe";
 import {
+  PRICE_ID_TO_PLAN_AND_INTERVAL,
+  mapPlanCodeToTier,
+  type CorePlanCode,
+  type BillingInterval,
+} from "@/lib/pricingConfig";
+import {
   sendSubscriptionCreatedEmail,
   sendSubscriptionUpdatedEmail,
   sendInvoiceUpcomingEmail,
@@ -183,7 +189,7 @@ export async function POST(request: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string;
         const subscriptionId = session.subscription as string;
-        const tier = session.metadata?.tier as "basic" | "advanced" | "elite" | undefined;
+        const metadataTier = session.metadata?.tier as "basic" | "advanced" | "elite" | undefined;
         const userId = session.metadata?.userId;
         const isTrialConversion = session.metadata?.is_trial_conversion === "true";
 
@@ -195,10 +201,41 @@ export async function POST(request: NextRequest) {
         // Fetch full subscription details from Stripe
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
+        // Derive planCode + interval from subscription items (preferred), fall back to metadata
+        const firstItem = subscription.items.data[0];
+        const priceId = firstItem?.price?.id as string | undefined;
+        let planCode: CorePlanCode | undefined;
+        let billingInterval: BillingInterval | undefined;
+
+        if (priceId && PRICE_ID_TO_PLAN_AND_INTERVAL[priceId]) {
+          planCode = PRICE_ID_TO_PLAN_AND_INTERVAL[priceId].planCode;
+          billingInterval = PRICE_ID_TO_PLAN_AND_INTERVAL[priceId].billingInterval;
+        } else {
+          const metaPlanCode = session.metadata?.planCode as CorePlanCode | undefined;
+          const metaInterval = (session.metadata?.billingInterval ||
+            session.metadata?.billingCycle) as BillingInterval | undefined;
+          planCode = metaPlanCode;
+          billingInterval = metaInterval;
+        }
+
+        // Fallback plan/tier to Essentials/basic if still undefined
+        const resolvedPlanCode: CorePlanCode = planCode || "essentials";
+        const resolvedTier =
+          metadataTier ||
+          mapPlanCodeToTier(resolvedPlanCode) ||
+          "basic";
+
+        // Check if this is an Essentials trial
+        const isEssentialsTrial = session.metadata?.is_essentials_trial === "true" || 
+                                   (resolvedPlanCode === "essentials" && subscription.status === "trialing");
+
         // Update or create subscription record (subscriptions table is source of truth)
         const subscriptionData: any = {
           user_id: userId,
-          tier: tier || "basic",
+          // New plan-based schema (feature gating)
+          plan: resolvedPlanCode,
+          // Legacy tier-based schema (backwards compatibility)
+          tier: resolvedTier,
           status: subscription.status as "active" | "trialing" | "canceled" | "past_due" | "incomplete" | "incomplete_expired" | "unpaid",
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
@@ -257,6 +294,12 @@ export async function POST(request: NextRequest) {
           has_used_trial: true, // Once they subscribe, they've "used" a trial (prevents preview mode)
         };
         
+        // Mark Essentials trial as used (Essentials is the only plan with a free trial)
+        // This flag is NEVER reset and prevents the user from getting another Essentials trial
+        if (isEssentialsTrial) {
+          profileUpdate.has_used_essentials_trial = true;
+        }
+        
         // Set trial_started_at if this is a new activation (trial or subscription start)
         // This is critical for metrics filtering - only count events after activation
         if (subscriptionData.trial_started_at) {
@@ -279,11 +322,17 @@ export async function POST(request: NextRequest) {
           .eq("id", userId);
 
         if (profileError) {
-          // Handle missing column error (42703 = undefined column)
-          if (profileError.code === '42703' && profileError.message?.includes('has_used_trial')) {
-            console.warn("has_used_trial column missing, updating without it. Please run migrations.");
-            // Remove has_used_trial from update and try again
-            const { has_used_trial, ...fallbackUpdate } = profileUpdate;
+          // Handle missing column errors (42703 = undefined column)
+          const hasMissingColumns = profileError.code === '42703';
+          const missingColumn = hasMissingColumns && (
+            profileError.message?.includes('has_used_trial') ||
+            profileError.message?.includes('has_used_essentials_trial')
+          );
+          
+          if (missingColumn) {
+            console.warn("Missing column in profiles table, updating without it. Please run migrations:", profileError.message);
+            // Remove potentially missing columns from update and try again
+            const { has_used_trial, has_used_essentials_trial, ...fallbackUpdate } = profileUpdate;
             const { error: fallbackError } = await supabase
               .from("profiles")
               .update(fallbackUpdate)
@@ -339,7 +388,25 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        const tier = (subscription.metadata?.tier as "basic" | "advanced" | "elite" | undefined) || "free";
+        // Derive planCode + interval from subscription items (preferred), fall back to metadata
+        const firstItem = subscription.items.data[0];
+        const priceId = firstItem?.price?.id as string | undefined;
+        let planCode: CorePlanCode | undefined;
+
+        if (priceId && PRICE_ID_TO_PLAN_AND_INTERVAL[priceId]) {
+          planCode = PRICE_ID_TO_PLAN_AND_INTERVAL[priceId].planCode;
+        } else {
+          const metaPlanCode = subscription.metadata?.planCode as CorePlanCode | undefined;
+          planCode = metaPlanCode;
+        }
+
+        const resolvedPlanCode: CorePlanCode = planCode || "essentials";
+        const resolvedTier =
+          (subscription.metadata?.tier as "basic" | "advanced" | "elite" | undefined) ||
+          mapPlanCodeToTier(resolvedPlanCode) ||
+          "free";
+
+        const tier = resolvedTier;
         const status = subscription.status as "active" | "trialing" | "canceled" | "paused" | "past_due" | "incomplete" | "incomplete_expired" | "unpaid";
 
         // Get current subscription to check if this is a cancellation/reactivation
@@ -355,6 +422,9 @@ export async function POST(request: NextRequest) {
 
         // Update subscriptions table (source of truth)
         const subscriptionData: any = {
+          // New plan-based schema
+          plan: resolvedPlanCode,
+          // Legacy tier-based schema
           tier,
           status,
           stripe_subscription_id: subscription.id,

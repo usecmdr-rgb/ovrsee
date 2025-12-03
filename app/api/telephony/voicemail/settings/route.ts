@@ -3,6 +3,67 @@ import { requireAuthFromRequest } from "@/lib/auth-helpers";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 /**
+ * GET /api/telephony/voicemail/settings
+ *
+ * Fetch current voicemail and call forwarding settings for the
+ * user's active number (if any).
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireAuthFromRequest(request);
+    const userId = user.id;
+    const supabase = getSupabaseServerClient();
+
+    const { data: activeNumber, error } = await supabase
+      .from("user_phone_numbers")
+      .select(
+        "external_phone_number, voicemail_enabled, voicemail_mode, forwarding_enabled, forwarding_confirmed"
+      )
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching voicemail settings:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch voicemail settings" },
+        { status: 500 }
+      );
+    }
+
+    if (!activeNumber) {
+      return NextResponse.json({
+        ok: true,
+        settings: {
+          externalPhoneNumber: null,
+          voicemailEnabled: false,
+          voicemailMode: "none",
+          forwardingEnabled: false,
+          forwardingConfirmed: false,
+        },
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      settings: {
+        externalPhoneNumber: activeNumber.external_phone_number,
+        voicemailEnabled: activeNumber.voicemail_enabled,
+        voicemailMode: activeNumber.voicemail_mode,
+        forwardingEnabled: activeNumber.forwarding_enabled,
+        forwardingConfirmed: activeNumber.forwarding_confirmed,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error in GET /api/telephony/voicemail/settings:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * PATCH /api/telephony/voicemail/settings
  * 
  * Update voicemail and call forwarding settings

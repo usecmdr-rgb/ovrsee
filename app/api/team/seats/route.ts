@@ -131,6 +131,9 @@ export async function GET(request: NextRequest) {
         return acc;
       }, []);
 
+    // TODO: when we enable yearly team billing in the UI, pass the selected
+    // billing interval into this handler (e.g. via query param) and forward it
+    // into calculateTeamPricing(seatSelections, billingInterval).
     const pricingBreakdown = calculateTeamPricing(seatSelections);
 
     return NextResponse.json({
@@ -287,6 +290,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Sync Stripe subscription (async, don't block response)
+    // TODO: when yearly team billing is enabled, thread a billingInterval
+    // argument through to syncWorkspaceSubscriptionFromSeats so workspace
+    // subscriptions can use the correct Stripe price IDs.
     syncWorkspaceSubscriptionFromSeats(workspace.id).catch((error) => {
       console.error("Failed to sync Stripe subscription after seat creation:", error);
       // Don't throw - allow seat creation to succeed even if Stripe sync fails

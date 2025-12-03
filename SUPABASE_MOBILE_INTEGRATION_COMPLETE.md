@@ -142,3 +142,5 @@ If you encounter issues:
 3. Check that `profiles` table exists in your Supabase database
 4. Review `ovrsee-mobile/SUPABASE_SETUP.md` for troubleshooting
 
+
+

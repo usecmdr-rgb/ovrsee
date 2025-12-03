@@ -71,3 +71,5 @@ To verify the setup is working:
 - Check that you're using the same Supabase project (not a different project)
 - Ensure the `profiles` table exists in your Supabase database
 
+
+

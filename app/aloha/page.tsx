@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { mockCalls } from "@/lib/data";
 import type { CallRecord } from "@/types";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
 import { useAgentAccess } from "@/hooks/useAgentAccess";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
 import Link from "next/link";
+import { supabaseBrowserClient } from "@/lib/supabaseClient";
+import { isDemoMode } from "@/lib/config/demoMode";
+import { useAccountMode } from "@/hooks/useAccountMode";
 import { 
   Phone, 
   Users, 
@@ -57,31 +59,56 @@ export default function AlohaPage() {
   const [phoneNumber, setPhoneNumber] = useState<UserPhoneNumber | null>(null);
   const t = useTranslation();
   
+  // Get current user and account mode for demo mode check
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { mode: accountMode } = useAccountMode();
+  
+  useEffect(() => {
+    supabaseBrowserClient.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUser(user);
+    });
+  }, []);
+  
+  // Check if we should use demo mode
+  // Demo data is shown for: unauthenticated users, authenticated users in 'preview' mode
+  // Demo data is removed for: authenticated users with 'trial-active', 'trial-expired', or 'subscribed'
+  const shouldUseDemoMode = useMemo(() => {
+    return isDemoMode(currentUser, accountMode);
+  }, [currentUser, accountMode]);
+  
   // Wait for access to be determined before showing stats to prevent flashing
   const isAccessReady = !accessLoading;
   
-  // Use preview/mock data if user doesn't have access (only after access check is complete)
-  const isPreview = isAccessReady && !hasAccess;
+  // Use preview mode only if user doesn't have access (not for demo mode)
+  const isPreview = isAccessReady && !hasAccess && !shouldUseDemoMode;
   
-  // Fallback to realistic random numbers if no stats available or in preview mode
-  // Only show fallback stats when access check is complete to prevent number flashing
-  const fallbackStats = useMemo(() => {
+  // For authenticated users, always use real stats (or empty stats if no data)
+  // Never show fake numbers for authenticated users
+  const latestStats = useMemo(() => {
     if (!isAccessReady) {
       // Return empty stats while loading to prevent flash
       return emptyAgentStats;
     }
-    return {
-      ...emptyAgentStats,
-      alpha_calls_total: isPreview ? 156 : 247,
-      alpha_calls_missed: isPreview ? 5 : 8,
-      alpha_appointments: isPreview ? 18 : 32,
-    };
-  }, [isPreview, isAccessReady]);
+    
+    // If we have real stats, use them
+    if (stats) {
+      return stats;
+    }
+    
+    // If no stats and user is authenticated, return empty stats (0s)
+    // Only use fallback for preview mode (unauthenticated users)
+    if (isPreview) {
+      return emptyAgentStats;
+    }
+    
+    // For authenticated users with no stats yet, return empty stats
+    return emptyAgentStats;
+  }, [stats, isAccessReady, isPreview]);
   
-  const latestStats = stats ?? fallbackStats;
   const answeredCalls = Math.max(latestStats.alpha_calls_total - latestStats.alpha_calls_missed, 0);
   const noStats = !stats && !loading && !error;
-  const [selectedCall, setSelectedCall] = useState<CallRecord | null>(mockCalls[0]);
+  const [selectedCall, setSelectedCall] = useState<CallRecord | null>(null);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
 
   const agentConfig = AGENT_BY_ID["aloha"];
 
@@ -91,8 +118,24 @@ export default function AlohaPage() {
       fetchContactStats();
       fetchConversationStats();
       fetchPhoneNumber();
+      fetchCalls();
     }
   }, [hasAccess, accessLoading]);
+
+  const fetchCalls = async () => {
+    try {
+      // TODO: Create API endpoint for calls
+      // For now, authenticated users see empty array (no mock data)
+      if (shouldUseDemoMode) {
+        // Demo mode is disabled, so this won't run
+        return;
+      }
+      setCalls([]);
+    } catch (err) {
+      console.error("Error fetching calls:", err);
+      setCalls([]);
+    }
+  };
 
   const fetchPhoneNumber = async () => {
     try {
@@ -111,35 +154,28 @@ export default function AlohaPage() {
   const fetchContactStats = async () => {
     try {
       // TODO: Create API endpoint for contact stats
-      // For now, use mock data
-      setContactStats({
-        totalContacts: 142,
-        doNotCallCount: 8,
-        recentlyContacted: 23,
-        averageContactFrequency: 2.4,
-      });
+      // For authenticated users, return null (no mock data)
+      if (shouldUseDemoMode) {
+        return;
+      }
+      setContactStats(null);
     } catch (err) {
       console.error("Error fetching contact stats:", err);
+      setContactStats(null);
     }
   };
 
   const fetchConversationStats = async () => {
     try {
       // TODO: Create API endpoint for conversation stats
-      // For now, use mock data
-      setConversationStats({
-        intentAccuracy: 94.2,
-        sentimentDistribution: {
-          happy: 45,
-          neutral: 38,
-          upset: 12,
-          angry: 5,
-        },
-        avgConversationDuration: 245, // seconds
-        empathyUsed: 17,
-      });
+      // For authenticated users, return null (no mock data)
+      if (shouldUseDemoMode) {
+        return;
+      }
+      setConversationStats(null);
     } catch (err) {
       console.error("Error fetching conversation stats:", err);
+      setConversationStats(null);
     }
   };
 
@@ -411,25 +447,33 @@ export default function AlohaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockCalls.map((call) => (
-                    <tr
-                      key={call.id}
-                      onClick={() => setSelectedCall(call)}
-                      className={`cursor-pointer border-t border-slate-100 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60 ${
-                        selectedCall?.id === call.id ? "bg-slate-100 dark:bg-slate-800/80" : ""
-                      }`}
-                    >
-                      <td className="py-3 font-semibold">{call.caller}</td>
-                      <td className="py-3">{call.time}</td>
-                      <td className="py-3 capitalize">{call.outcome}</td>
-                      <td className="py-3">
-                        <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          {t("alohaNeutral")}
-                        </span>
+                  {calls.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-sm text-slate-500">
+                        No calls yet. Calls will appear here once Aloha starts handling them.
                       </td>
-                      <td className="py-3 text-slate-500">{call.summary}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    calls.map((call) => (
+                      <tr
+                        key={call.id}
+                        onClick={() => setSelectedCall(call)}
+                        className={`cursor-pointer border-t border-slate-100 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60 ${
+                          selectedCall?.id === call.id ? "bg-slate-100 dark:bg-slate-800/80" : ""
+                        }`}
+                      >
+                        <td className="py-3 font-semibold">{call.caller}</td>
+                        <td className="py-3">{call.time}</td>
+                        <td className="py-3 capitalize">{call.outcome}</td>
+                        <td className="py-3">
+                          <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            {t("alohaNeutral")}
+                          </span>
+                        </td>
+                        <td className="py-3 text-slate-500">{call.summary}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

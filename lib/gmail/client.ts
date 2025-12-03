@@ -1,6 +1,12 @@
 /**
  * Gmail API Client
  * Handles authentication, token refresh, and Gmail API operations
+ * 
+ * IMPORTANT: This uses GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET for OAuth,
+ * which is SEPARATE from Supabase Google authentication.
+ * 
+ * - Supabase Google login: Uses Supabase's OAuth client
+ * - Gmail OAuth: Uses GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET from Google Cloud Console
  */
 
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
@@ -96,7 +102,19 @@ async function refreshGmailToken(refreshToken: string, userId: string): Promise<
   const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
-    throw new Error("Gmail OAuth not configured");
+    throw new Error(
+      "Gmail OAuth not configured. " +
+      "Please set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in your environment variables. " +
+      "See app/api/gmail/auth/route.ts for setup instructions."
+    );
+  }
+  
+  // Validate they're not placeholders
+  if (GMAIL_CLIENT_ID.includes("your_") || GMAIL_CLIENT_SECRET.includes("your_")) {
+    throw new Error(
+      "Gmail OAuth credentials contain placeholder values. " +
+      "Please set actual values from Google Cloud Console in your .env.local file."
+    );
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {

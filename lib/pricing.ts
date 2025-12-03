@@ -24,24 +24,28 @@ export interface PricingBreakdown {
 }
 
 // Base tier configuration - prices in USD per month
+// Updated pricing model:
+// - Essentials ($39.99): Includes Sync (email + calendar), standard support
+// - Professional ($79.99): Includes Essentials + Aloha (AI receptionist) + Studio (AI media creation), priority support
+// - Executive ($129.99): Includes Professional + Insight (business intelligence), all features unlocked, weekly reports + analytics
 export const TIERS = {
   basic: {
     id: 'basic' as TierId,
-    name: 'Basic',
+    name: 'Essentials', // Display name updated to match new pricing model
     priceMonthly: 39.99,
-    agents: 1, // 1 agent total
+    agents: 1, // 1 agent total (Sync)
   },
   advanced: {
     id: 'advanced' as TierId,
-    name: 'Advanced',
-    priceMonthly: 99.99,
-    agents: 3, // 3 agents total
+    name: 'Professional', // Display name updated to match new pricing model
+    priceMonthly: 79.99, // Updated price: was 99.99
+    agents: 3, // 3 agents total (Sync + Aloha + Studio)
   },
   elite: {
     id: 'elite' as TierId,
-    name: 'Elite',
-    priceMonthly: 159.99,
-    agents: 4, // 4 agents total (includes all from Advanced + 1 extra elite-level agent)
+    name: 'Executive', // Display name updated to match new pricing model
+    priceMonthly: 129.99, // Updated price: was 159.99
+    agents: 4, // 4 agents total (Sync + Aloha + Studio + Insight)
   },
 } as const;
 
@@ -63,13 +67,20 @@ export function getTeamDiscountPercent(totalSeats: number): number {
 
 /**
  * Calculate team pricing breakdown
- * 
+ *
  * @param seats Array of seat selections with tier and count
+ * @param billingInterval Billing interval for team pricing (currently only monthly is implemented)
  * @returns Complete pricing breakdown including discounts
  */
-export function calculateTeamPricing(seats: SeatSelection[]): PricingBreakdown {
+export function calculateTeamPricing(
+  seats: SeatSelection[],
+  billingInterval: 'monthly' | 'yearly' = 'monthly'
+): PricingBreakdown {
   // Initialize per-tier tracking
   const perTier: PricingBreakdown['perTier'] = {
+    // TODO: when enabling yearly team billing, switch unitPrice to a yearly per-seat
+    // amount (11 × monthly) when billingInterval === "yearly". For now we always
+    // use monthly pricing so behavior matches existing production.
     basic: { count: 0, unitPrice: TIERS.basic.priceMonthly, subtotal: 0 },
     advanced: { count: 0, unitPrice: TIERS.advanced.priceMonthly, subtotal: 0 },
     elite: { count: 0, unitPrice: TIERS.elite.priceMonthly, subtotal: 0 },

@@ -54,3 +54,5 @@ If you see errors:
 - For web, the default Expo port is **19006**
 - The app will automatically open in your browser
 
+
+

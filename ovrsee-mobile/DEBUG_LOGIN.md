@@ -102,3 +102,5 @@ Share:
 3. Whether the account works in web app
 4. Whether account exists in Supabase dashboard
 
+
+

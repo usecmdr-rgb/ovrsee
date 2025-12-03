@@ -59,3 +59,5 @@ After restarting with cache cleared:
 2. Run: `cd /Users/nemo/cursor/COMMANDX/ovrsee-mobile && npx expo start --clear --web`
 3. Wait for browser to open automatically
 4. You should see your app! 🎉
+
+

@@ -59,3 +59,5 @@ The blank screen is just a symptom - the console will tell us what's actually br
 - ✅ The app UI (success!)
 - ❌ An error message (which tells us what to fix)
 - ❌ Still blank (check console for hidden errors)
+
+

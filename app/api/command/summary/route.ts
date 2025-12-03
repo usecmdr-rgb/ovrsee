@@ -142,12 +142,12 @@ export async function GET(request: NextRequest) {
 
     // Fetch today's calendar events
     const { data: calendarEvents } = await supabase
-      .from("calendar_events")
+      .from("sync_calendar_events")
       .select("*")
-      .eq("user_id", user.id)
-      .gte("start_time", today.toISOString())
-      .lt("start_time", tomorrow.toISOString())
-      .order("start_time", { ascending: true });
+      .eq("workspace_id", workspaceId)
+      .gte("start_at", today.toISOString())
+      .lt("start_at", tomorrow.toISOString())
+      .order("start_at", { ascending: true });
 
     // Get memory facts and relationships for personalization
     const [memoryFacts, relationships] = await Promise.all([
@@ -208,13 +208,15 @@ export async function GET(request: NextRequest) {
       });
 
     // Build calendar events
-    const calendarToday = (calendarEvents || []).map((event) => ({
-      id: event.id,
-      title: event.summary || event.title || "Untitled Event",
-      start: event.start_time,
-      end: event.end_time,
-      location: event.location,
-    }));
+    const calendarToday = (calendarEvents || [])
+      .filter((event) => event.start_at) // Only include events with a start time
+      .map((event) => ({
+        id: event.id,
+        title: event.summary || "Untitled Event",
+        start: event.start_at || new Date().toISOString(),
+        end: event.end_at || event.start_at || new Date().toISOString(),
+        location: event.location || undefined,
+      }));
 
     // Generate recommended actions from insights, emails, and calls
     const recommendedActions: CommandSummary["recommendedActions"] = [];

@@ -159,6 +159,38 @@ export async function markTrialAsUsed(
 }
 
 /**
+ * Check if a user has used their Essentials trial
+ * 
+ * Essentials is the only plan with a 3-day free trial.
+ * This function checks if the user has already used that trial.
+ * 
+ * @param userId - User's ID
+ * @returns true if user has used Essentials trial, false otherwise
+ */
+export async function hasUserUsedEssentialsTrial(userId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("has_used_essentials_trial")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    // Handle missing column error (42703 = undefined column)
+    if (error.code === '42703' && error.message?.includes('has_used_essentials_trial')) {
+      console.warn("has_used_essentials_trial column missing, defaulting to false. Please run migrations.");
+      return false;
+    }
+    console.error("Error checking Essentials trial eligibility:", error);
+    // Fail closed: if we can't verify, assume trial has been used
+    return true;
+  }
+
+  return profile?.has_used_essentials_trial === true;
+}
+
+/**
  * Check if a user is currently on an active trial
  * 
  * @param userId - User's ID

@@ -5,17 +5,23 @@ import {
   hasEmailUsedTrial,
   markTrialAsUsed,
   isUserOnActiveTrial,
+  hasUserUsedEssentialsTrial,
 } from "@/lib/trial-eligibility";
 import { requireAuthFromRequest } from "@/lib/auth-helpers";
 
 /**
  * POST /api/trial/start
  * 
- * Starts a 3-day free trial for a user.
+ * Starts a 3-day free trial for Essentials plan ONLY.
+ * 
+ * TRIAL POLICY:
+ * - The 3-day free trial applies ONLY to Essentials (Sync) plan
+ * - Professional and Executive plans do NOT have free trials
+ * - Each user can receive the Essentials trial at most once
+ * - We track has_used_essentials_trial per user to prevent multiple trials
  * 
  * SECURITY & TRIAL ENFORCEMENT:
  * - User must be authenticated
- * - Email-based trial eligibility check (one trial per email, ever)
  * - Server-side enforcement prevents trial abuse
  * - Cannot restart trial even if account is deleted and recreated
  * 
@@ -44,19 +50,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
     }
 
-    // ============================================
-    // ONE-TIME TRIAL ENFORCEMENT
-    // ============================================
-    // Check if this email has already used a trial
-    // This check survives account deletion and prevents trial abuse
-    const emailHasUsedTrial = await hasEmailUsedTrial(userEmail);
-    if (emailHasUsedTrial) {
+    // TRIAL POLICY: Only Essentials (basic) plan includes a free trial
+    // Professional and Executive do NOT have free trials
+    if (tier !== "basic") {
       return NextResponse.json(
         {
-          error: "You have already used your free trial",
+          error: "Free trial is only available for Essentials plan",
+          code: "TRIAL_NOT_AVAILABLE",
+          message: "Only Essentials plan includes a 3-day free trial. Professional and Executive plans require immediate payment.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ============================================
+    // ONE-TIME TRIAL ENFORCEMENT - ESSENTIALS ONLY
+    // ============================================
+    // Check if user has already used their Essentials trial
+    // Only Essentials plan includes a free trial
+    const hasUsedEssentialsTrial = await hasUserUsedEssentialsTrial(userId);
+    
+    if (hasUsedEssentialsTrial) {
+      return NextResponse.json(
+        {
+          error: "You have already used your Essentials free trial",
           code: "TRIAL_ALREADY_USED",
           message:
-            "Each email address can only use the free trial once. Please choose a paid plan to continue.",
+            "Each account can only use the Essentials free trial once. Please choose a paid plan to continue.",
         },
         { status: 403 }
       );
@@ -133,8 +153,10 @@ export async function POST(request: NextRequest) {
       trial_period_days: 3,
       metadata: {
         tier,
+        planCode: "essentials", // Mark as Essentials plan
         userId,
         is_trial: "true",
+        is_essentials_trial: "true", // Mark as Essentials trial
       },
     });
 
@@ -147,14 +169,28 @@ export async function POST(request: NextRequest) {
       : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
     // ============================================
-    // MARK TRIAL AS USED (ONE-TIME ENFORCEMENT)
+    // MARK ESSENTIALS TRIAL AS USED (ONE-TIME ENFORCEMENT)
     // ============================================
     // This flag is NEVER reset, even if:
     // - Trial ends
     // - User cancels
     // - Account is deleted
-    // This prevents the same email from getting another trial
+    // This prevents the same account from getting another Essentials trial
+    // Also mark the generic has_used_trial for backward compatibility
     await markTrialAsUsed(userId, userEmail);
+    
+    // Mark Essentials trial as used specifically
+    const { error: essentialsTrialError } = await supabase
+      .from("profiles")
+      .update({ has_used_essentials_trial: true })
+      .eq("id", userId);
+    
+    if (essentialsTrialError) {
+      // Handle missing column error gracefully
+      if (essentialsTrialError.code !== '42703') {
+        console.error("Error marking Essentials trial as used:", essentialsTrialError);
+      }
+    }
 
     // Store subscription info in Supabase
     // IMPORTANT: Set trial_started_at to mark when user activated (for metrics filtering)

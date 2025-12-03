@@ -29,6 +29,8 @@ interface AnonymousRequest {
   teamSize: number;
   callVolume: "low" | "medium" | "high";
   emailVolume: "low" | "medium" | "high";
+  mediaVolume?: "low" | "medium" | "high"; // Optional: media generation volume
+  analyticsVolume?: "low" | "medium" | "high"; // Optional: analytics volume
   needsVoice: boolean;
   needsInsights: boolean;
   budgetSensitivity: "low" | "medium" | "high";
@@ -73,42 +75,53 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<NextResponse> {
-  const { teamSize, callVolume, emailVolume, needsVoice, needsInsights, budgetSensitivity } = req;
+  // Extract all parameters including mediaVolume and analyticsVolume for updated recommendation logic
+  const { teamSize, callVolume, emailVolume, mediaVolume, analyticsVolume, needsVoice, needsInsights, budgetSensitivity } = req;
 
   // Recommendation logic
   let suggestedSeats: PlanSeatSuggestion[] = [];
   let reasoning = "";
 
   // Solo or very small teams
+  // Updated recommendation logic for new pricing model: Essentials, Professional, Executive
   if (teamSize <= 2) {
     if (needsInsights) {
       suggestedSeats = [{ tier: "elite" as TierId, count: 1 }];
-      reasoning = `For a solo operator or small team of ${teamSize} with insight needs, we recommend 1 Elite seat. This gives you full access to all agents including the Insight Agent for business intelligence.`;
+      reasoning = `For a solo operator or small team of ${teamSize} with insight needs, we recommend 1 Executive seat. This gives you full access to all agents including the Insight Agent for business intelligence.`;
     } else if (needsVoice) {
       suggestedSeats = [{ tier: "advanced" as TierId, count: 1 }];
-      reasoning = `For a small team of ${teamSize} with AI voice needs, we recommend 1 Advanced seat. This unlocks Aloha for call handling and Studio for media management.`;
+      reasoning = `For a small team of ${teamSize} with AI voice needs, we recommend 1 Professional seat. This unlocks Aloha for call handling and Studio for media management.`;
     } else {
       suggestedSeats = [{ tier: "basic" as TierId, count: teamSize }];
-      reasoning = `For a small team of ${teamSize} focused on email and calendar management, we recommend ${teamSize} Basic seat(s). This gives you access to the Sync Agent at an affordable price.`;
+      reasoning = `For a small team of ${teamSize} focused on email and calendar management, we recommend ${teamSize} Essentials seat(s). This gives you access to the Sync Agent at an affordable price.`;
     }
   }
   // Medium teams (3-10)
+  // Updated recommendation logic per new pricing model:
+  // - call volume > Medium → Professional
+  // - media volume > Medium → Professional
+  // - analytics volume > Medium → Executive
+  // - "I need AI voice answering" → Professional or higher
+  // - "I care about deep analytics" → Executive
   else if (teamSize <= 10) {
-    if (needsInsights || (callVolume === "high" && emailVolume === "high")) {
-      // Mix of Elite and Advanced
+    // Check for Executive requirements first (analytics volume > Medium or deep analytics need)
+    if (needsInsights || analyticsVolume === "high" || analyticsVolume === "medium") {
+      // Mix of Executive and Professional
       const eliteCount = Math.min(2, Math.ceil(teamSize * 0.3));
       const advancedCount = teamSize - eliteCount;
       suggestedSeats = [
         { tier: "elite" as TierId, count: eliteCount },
         { tier: "advanced" as TierId, count: advancedCount },
       ];
-      reasoning = `For a team of ${teamSize} with high-volume usage and insight needs, we recommend ${eliteCount} Elite seat(s) for leadership/analytics and ${advancedCount} Advanced seat(s) for team members. This balances cost with full feature access.`;
-    } else if (needsVoice || callVolume !== "low") {
+      reasoning = `For a team of ${teamSize} with high-volume usage and insight needs, we recommend ${eliteCount} Executive seat(s) for leadership/analytics and ${advancedCount} Professional seat(s) for team members. This balances cost with full feature access.`;
+    } 
+    // Check for Professional requirements (call volume > Medium, media volume > Medium, or AI voice need)
+    else if (needsVoice || callVolume === "high" || callVolume === "medium" || mediaVolume === "high" || mediaVolume === "medium") {
       suggestedSeats = [{ tier: "advanced", count: teamSize }];
-      reasoning = `For a team of ${teamSize} with voice needs, we recommend ${teamSize} Advanced seat(s). This gives everyone access to Aloha for call handling and Studio for media management.`;
+      reasoning = `For a team of ${teamSize} with voice or media needs, we recommend ${teamSize} Professional seat(s). This gives everyone access to Aloha for call handling and Studio for media management.`;
     } else {
       suggestedSeats = [{ tier: "basic" as TierId, count: teamSize }];
-      reasoning = `For a team of ${teamSize} focused primarily on email management, we recommend ${teamSize} Basic seat(s). You can always upgrade individual seats later if needs change.`;
+      reasoning = `For a team of ${teamSize} focused primarily on email management, we recommend ${teamSize} Essentials seat(s). You can always upgrade individual seats later if needs change.`;
     }
   }
   // Larger teams (11+)
@@ -122,7 +135,7 @@ async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<Nex
       { tier: "advanced" as TierId, count: advancedCount },
       { tier: "basic" as TierId, count: basicCount },
     ].filter((s) => s.count > 0);
-    reasoning = `For a larger team of ${teamSize}, we recommend a tiered approach: ${eliteCount} Elite seat(s) for leadership/analytics, ${advancedCount} Advanced seat(s) for core team members, and ${basicCount} Basic seat(s) for occasional users. This optimizes cost while ensuring the right features for each role.`;
+    reasoning = `For a larger team of ${teamSize}, we recommend a tiered approach: ${eliteCount} Executive seat(s) for leadership/analytics, ${advancedCount} Professional seat(s) for core team members, and ${basicCount} Essentials seat(s) for occasional users. This optimizes cost while ensuring the right features for each role.`;
   }
 
   // Apply budget sensitivity adjustments
@@ -142,7 +155,7 @@ async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<Nex
         if (!suggestedSeats.includes(advancedSeat)) {
           suggestedSeats.push(advancedSeat);
         }
-        reasoning += " We've adjusted for budget sensitivity by prioritizing Advanced over Elite seats where possible.";
+        reasoning += " We've adjusted for budget sensitivity by prioritizing Professional over Executive seats where possible.";
       }
     }
     if (hasAdvanced && teamSize > 5) {
@@ -156,7 +169,7 @@ async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<Nex
         if (!suggestedSeats.includes(basicSeat)) {
           suggestedSeats.push(basicSeat);
         }
-        reasoning += " Some seats were adjusted to Basic tier for cost optimization.";
+        reasoning += " Some seats were adjusted to Essentials tier for cost optimization.";
       }
     }
     
@@ -283,15 +296,16 @@ async function handleWorkspaceRecommendation(): Promise<NextResponse> {
 
   if (totalCurrentSeats === 0) {
     // No seats yet - recommend based on usage
+    // Updated for new pricing model: Essentials, Professional, Executive
     if (needsInsights) {
       suggestedSeats = [{ tier: "elite" as TierId, count: 1 }];
-      reasoning = "Based on your usage patterns, we recommend starting with 1 Elite seat to access all agents including insights.";
+      reasoning = "Based on your usage patterns, we recommend starting with 1 Executive seat to access all agents including insights.";
     } else if (needsVoice) {
       suggestedSeats = [{ tier: "advanced" as TierId, count: 1 }];
-      reasoning = "Based on your call handling needs, we recommend 1 Advanced seat for Aloha and Studio access.";
+      reasoning = "Based on your call handling needs, we recommend 1 Professional seat for Aloha and Studio access.";
     } else {
       suggestedSeats = [{ tier: "basic" as TierId, count: 1 }];
-      reasoning = "Based on your usage, we recommend 1 Basic seat to get started with the Sync Agent.";
+      reasoning = "Based on your usage, we recommend 1 Essentials seat to get started with the Sync Agent.";
     }
   } else {
     // Already have seats - analyze if current setup is optimal
@@ -299,24 +313,24 @@ async function handleWorkspaceRecommendation(): Promise<NextResponse> {
     
     // Check if we should recommend changes
     if (needsInsights && currentSeatCounts.elite === 0) {
-      // Need insights but no Elite seats
+      // Need insights but no Executive seats
       suggestedSeats = [
         { tier: "elite" as TierId, count: Math.max(1, Math.ceil(currentTotal * 0.2)) },
         { tier: "advanced" as TierId, count: Math.max(0, currentSeatCounts.advanced) },
         { tier: "basic" as TierId, count: currentSeatCounts.basic },
       ].filter((s) => s.count > 0);
-      reasoning = `You're currently on ${totalCurrentSeats} seat(s) but are using insights features. We recommend adding at least 1 Elite seat for Insight Agent access.`;
+      reasoning = `You're currently on ${totalCurrentSeats} seat(s) but are using insights features. We recommend adding at least 1 Executive seat for Insight Agent access.`;
     } else if (callVolume === "high" && currentSeatCounts.advanced === 0 && currentSeatCounts.elite === 0) {
-      // High call volume but no Advanced/Elite
+      // High call volume but no Professional/Executive
       suggestedSeats = [
         { tier: "advanced" as TierId, count: Math.ceil(currentTotal * 0.5) },
         { tier: "basic" as TierId, count: Math.floor(currentTotal * 0.5) },
       ];
-      reasoning = `You're handling high call volume (${Math.round(avgCallsPerDay)} calls/day). We recommend upgrading some seats to Advanced for Aloha Agent access.`;
+      reasoning = `You're handling high call volume (${Math.round(avgCallsPerDay)} calls/day). We recommend upgrading some seats to Professional for Aloha Agent access.`;
     } else if (callVolume === "low" && emailVolume === "low" && currentSeatCounts.basic < currentTotal) {
       // Low usage - could downgrade
       suggestedSeats = [{ tier: "basic" as TierId, count: currentTotal }];
-      reasoning = `Your usage is relatively low. Consider consolidating to ${currentTotal} Basic seat(s) to optimize costs while maintaining essential features.`;
+      reasoning = `Your usage is relatively low. Consider consolidating to ${currentTotal} Essentials seat(s) to optimize costs while maintaining essential features.`;
     } else {
       // Current setup seems good
       suggestedSeats = [

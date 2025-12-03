@@ -106,3 +106,5 @@ ADD COLUMN IF NOT EXISTS sync_error TEXT;
 -- Create index for sync status
 CREATE INDEX IF NOT EXISTS idx_gmail_connections_sync_status ON gmail_connections(sync_status) WHERE sync_status = 'error';
 
+
+

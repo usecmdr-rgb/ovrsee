@@ -134,3 +134,5 @@ export function generateForecastMessage(
   return `If trend continues, ${metricName} next period: ~${Math.round(value)}${unit ? ` ${unit}` : ''} (${confidencePercent}% confidence)`;
 }
 
+
+

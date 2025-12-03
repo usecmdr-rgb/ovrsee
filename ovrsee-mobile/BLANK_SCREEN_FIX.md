@@ -68,3 +68,5 @@ After restarting with the fixes:
 4. We'll fix them one by one!
 
 The blank screen means the app is trying to load but hitting an error. The error boundary I added will now show us what that error is!
+
+

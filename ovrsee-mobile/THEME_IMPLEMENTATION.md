@@ -107,3 +107,5 @@ const colors = useColors();
 - Theme changes apply immediately
 - StatusBar color updates based on theme
 
+
+

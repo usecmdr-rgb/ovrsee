@@ -42,24 +42,37 @@
 --   - workflows
 --   - Any other tables that reference agent_type
 
-BEGIN;
+-- Make this migration safe on databases where the `agent_type` column
+-- doesn't exist (e.g. fresh projects). We only run the UPDATEs if the
+-- `agents.agent_type` column is present.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'agents'
+      AND column_name = 'agent_type'
+  ) THEN
+    -- Update agents table (adjust table name if different)
+    UPDATE public.agents 
+    SET agent_type = 'aloha' 
+    WHERE agent_type = 'alpha';
 
--- Update agents table (adjust table name if different)
-UPDATE agents 
-SET agent_type = 'aloha' 
-WHERE agent_type = 'alpha';
+    UPDATE public.agents 
+    SET agent_type = 'studio' 
+    WHERE agent_type = 'mu';
 
-UPDATE agents 
-SET agent_type = 'studio' 
-WHERE agent_type = 'mu';
+    UPDATE public.agents 
+    SET agent_type = 'sync' 
+    WHERE agent_type = 'xi';
 
-UPDATE agents 
-SET agent_type = 'sync' 
-WHERE agent_type = 'xi';
-
-UPDATE agents 
-SET agent_type = 'insight' 
-WHERE agent_type = 'beta';
+    UPDATE public.agents 
+    SET agent_type = 'insight' 
+    WHERE agent_type = 'beta';
+  END IF;
+END
+$$;
 
 -- Update agent_sessions table (if it exists)
 -- UPDATE agent_sessions 
@@ -96,23 +109,7 @@ WHERE agent_type = 'beta';
 -- WHERE agent_type = 'beta';
 
 -- Update workflows table (if it exists and has agent_type column)
--- UPDATE workflows 
--- SET agent_type = 'aloha' 
--- WHERE agent_type = 'alpha';
--- 
--- UPDATE workflows 
--- SET agent_type = 'studio' 
--- WHERE agent_type = 'mu';
--- 
--- UPDATE workflows 
--- SET agent_type = 'sync' 
--- WHERE agent_type = 'xi';
--- 
--- UPDATE workflows 
--- SET agent_type = 'insight' 
--- WHERE agent_type = 'beta';
-
-COMMIT;
+-- (left as commented examples; adjust and enable as needed)
 
 -- ============================================================================
 -- Verification queries (run after migration to verify)

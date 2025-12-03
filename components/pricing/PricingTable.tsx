@@ -1,7 +1,13 @@
 "use client";
 
-// Pricing comparison table with 3 tiers (Basic, Advanced, Elite) + Teams
+// Pricing comparison table with 3 tiers (Essentials, Professional, Executive) + Teams
 // and a clean chart that shows which agent is included in which tier.
+//
+// YEARLY BILLING SUPPORT:
+// - Toggle between Monthly and Yearly billing cycles
+// - Yearly pricing = 11 × monthly (1 month free)
+// - Prices update dynamically based on billing cycle selection
+// - UI layout remains unchanged, only values and text update
 
 import { useState, useMemo } from "react";
 import { Check, X, AlertCircle, Calendar } from "lucide-react";
@@ -13,7 +19,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { useTranslation } from "@/hooks/useTranslation";
 import { useTrialStatus } from "@/hooks/useTrialStatus";
 import { agents } from "@/lib/data";
-import { BASE_PRICES, formatPrice } from "@/lib/currency";
+import { formatPrice } from "@/lib/currency";
+import { PLAN_PRICING, getPlanAmount, type BillingInterval, type CorePlanCode } from "@/lib/pricingConfig";
+import { useBillingInterval } from "@/components/pricing/BillingIntervalContext";
+import { useStartCheckout } from "@/components/pricing/useStartCheckout";
 
 type TierId = "basic" | "advanced" | "elite";
 
@@ -47,33 +56,59 @@ export default function PricingTable() {
   const [loading, setLoading] = useState(false);
   const [trialStarted, setTrialStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { billingInterval: billingCycle, setBillingInterval: setBillingCycle } = useBillingInterval();
   const t = useTranslation();
   
   // Get trial status to determine if user can start a trial
   const { hasUsedTrial, isOnTrial, isTrialExpired, canStartTrial, loading: trialStatusLoading } = useTrialStatus();
 
+  // Map tier IDs to plan codes for pricing config
+  const tierToPlanCode: Record<TierId, CorePlanCode> = {
+    basic: "essentials",
+    advanced: "professional",
+    elite: "executive",
+  };
+
   const tiers = useMemo(() => {
     return [
       {
         id: "basic" as TierId,
-        name: t("basic"),
-        price: formatPrice(BASE_PRICES.basic, language),
-        description: t("startWithXi"),
+        name: "Essentials",
+        planCode: "essentials" as CorePlanCode,
+        description: "Start with Sync.", // Updated plan description
+        hasTrial: true, // Essentials is the only plan with a 3-day free trial
       },
       {
         id: "advanced" as TierId,
-        name: t("advanced"),
-        price: formatPrice(BASE_PRICES.advanced, language),
-        description: t("unlockAlphaMu"),
+        name: "Professional",
+        planCode: "professional" as CorePlanCode,
+        description: "Unlock Aloha & Studio.", // Updated plan description
+        hasTrial: false, // Professional has NO free trial
       },
       {
         id: "elite" as TierId,
-        name: t("elite"),
-        price: formatPrice(BASE_PRICES.elite, language),
-        description: t("everythingPlusBeta"),
+        name: "Executive",
+        planCode: "executive" as CorePlanCode,
+        description: "Everything, plus Insights.", // Updated plan description
+        hasTrial: false, // Executive has NO free trial
       },
-    ];
-  }, [t, language]);
+    ].map((tier) => {
+      // Get price based on billing cycle
+      const priceInCents = getPlanAmount(tier.planCode, billingCycle);
+      const priceInDollars = priceInCents / 100;
+      
+      // Format price display
+      const priceDisplay = billingCycle === "yearly" 
+        ? formatPrice(priceInDollars, language) + "/year"
+        : formatPrice(priceInDollars, language);
+      
+      return {
+        ...tier,
+        price: priceDisplay,
+        priceInCents,
+      };
+    });
+  }, [t, language, billingCycle]);
 
   const rows = useMemo(() => {
     // Get agents in the correct order: Sync, Aloha, Studio, Insight
@@ -128,6 +163,9 @@ export default function PricingTable() {
     ];
   }, [t]);
 
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const { startCheckout } = useStartCheckout();
+
   const handleStartTrial = async () => {
     if (!isAuthenticated) {
       openAuthModal("signup");
@@ -160,7 +198,7 @@ export default function PricingTable() {
         return;
       }
 
-      // Start trial with Basic tier (default)
+      // Start trial with Essentials tier (default)
       // Server will enforce one-time trial rule
       const response = await fetch("/api/trial/start", {
         method: "POST",
@@ -192,14 +230,68 @@ export default function PricingTable() {
     }
   };
 
+  const handleSubscribe = async (tierId: TierId) => {
+    if (!isAuthenticated) {
+      openAuthModal("signup");
+      return;
+    }
+
+    try {
+      setCheckoutLoading(tierId);
+      setError(null);
+
+      // Get current user
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        openAuthModal("signup");
+        setCheckoutLoading(null);
+        return;
+      }
+
+      const planCode = tierToPlanCode[tierId];
+
+      await startCheckout(planCode, billingCycle);
+    } catch (err: any) {
+      setError(err.message || t("pleaseTryAgain"));
+      setCheckoutLoading(null);
+    }
+  };
+
   return (
     <Card className="w-full h-full flex flex-col overflow-hidden">
       <CardContent className="flex-1 flex flex-col min-h-0">
-        {/* Monthly Plan Title */}
+        {/* Billing Cycle Toggle */}
+        <div className="flex items-center justify-center gap-2 mb-4 flex-shrink-0">
+          <button
+            onClick={() => setBillingCycle("monthly")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              billingCycle === "monthly"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setBillingCycle("yearly")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              billingCycle === "yearly"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            Yearly – Save 1 Month
+          </button>
+        </div>
+        
+        {/* Plan Title */}
         <div className="text-left mb-4 flex-shrink-0">
           <h2 className="text-lg font-semibold font-sans flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            Monthly Plan
+            {billingCycle === "yearly" ? "Annual Plan" : "Monthly Plan"}
           </h2>
         </div>
         {/* TABLE */}
@@ -230,6 +322,14 @@ export default function PricingTable() {
                       <div className="flex-shrink-0">
                         <span className="text-base font-semibold">{tier.price}</span>
                       </div>
+                      {/* Yearly billing subtext */}
+                      {billingCycle === "yearly" && (
+                        <div className="flex-shrink-0">
+                          <span className="text-xs text-muted-foreground">
+                            Billed annually • Save 1 month
+                          </span>
+                        </div>
+                      )}
                       {/* Badge */}
                       <div className="flex-shrink-0">
                         <div className={`tier-badge ${tierClass} text-xs font-semibold tracking-wide uppercase`}>
@@ -294,19 +394,64 @@ export default function PricingTable() {
                     </div>
                   </td>
 
-                  {/* Basic */}
+                  {/* Essentials */}
                   <td className="px-1.5 py-1.5 text-center border-t border-slate-200 dark:border-slate-800 bg-background/60">
-                    <CellValue value={row.basic} />
+                    <div className="flex flex-col items-center gap-1">
+                      <CellValue value={row.basic} />
+                      {/* Trial text for Sync row in Essentials column */}
+                      {rowIndex === 0 && row.label.toLowerCase().includes("sync") && row.basic === true && (
+                        <span className="text-xs text-muted-foreground">
+                          Try Sync free for 3 days
+                        </span>
+                      )}
+                      {/* Subscribe button in last row */}
+                      {rowIndex === rows.length - 1 && (
+                        <Button
+                          onClick={() => handleSubscribe("basic")}
+                          disabled={checkoutLoading === "basic"}
+                          size="sm"
+                          className="mt-2 w-full text-xs"
+                        >
+                          {checkoutLoading === "basic" ? "Loading..." : "Get Started"}
+                        </Button>
+                      )}
+                    </div>
                   </td>
 
-                  {/* Advanced */}
+                  {/* Professional */}
                   <td className="px-1.5 py-1.5 text-center border-t border-l border-slate-200 dark:border-slate-800">
-                    <CellValue value={row.advanced} />
+                    <div className="flex flex-col items-center gap-1">
+                      <CellValue value={row.advanced} />
+                      {/* Subscribe button in last row */}
+                      {rowIndex === rows.length - 1 && (
+                        <Button
+                          onClick={() => handleSubscribe("advanced")}
+                          disabled={checkoutLoading === "advanced"}
+                          size="sm"
+                          className="mt-2 w-full text-xs"
+                        >
+                          {checkoutLoading === "advanced" ? "Loading..." : "Get Started"}
+                        </Button>
+                      )}
+                    </div>
                   </td>
 
-                  {/* Elite */}
+                  {/* Executive */}
                   <td className="px-1.5 py-1.5 text-center border-t border-l border-slate-200 dark:border-slate-800 bg-background/60">
-                    <CellValue value={row.elite} />
+                    <div className="flex flex-col items-center gap-1">
+                      <CellValue value={row.elite} />
+                      {/* Subscribe button in last row */}
+                      {rowIndex === rows.length - 1 && (
+                        <Button
+                          onClick={() => handleSubscribe("elite")}
+                          disabled={checkoutLoading === "elite"}
+                          size="sm"
+                          className="mt-2 w-full text-xs"
+                        >
+                          {checkoutLoading === "elite" ? "Loading..." : "Get Started"}
+                        </Button>
+                      )}
+                    </div>
                   </td>
 
                   {/* Teams - show checkmarks for all features */}
@@ -358,7 +503,7 @@ export default function PricingTable() {
           <>
             {!hasUsedTrial && (
               <p className="text-xs text-muted-foreground text-center max-w-md">
-                {t("trialNote")}
+                Start a 3-day Essentials (Sync) trial. No credit card required. Cancel anytime.
               </p>
             )}
             <Button
@@ -369,8 +514,8 @@ export default function PricingTable() {
               {loading
                 ? t("startingTrial")
                 : isAuthenticated
-                  ? t("startTrial")
-                  : t("signInToStartTrial")}
+                  ? "Start Essentials 3-day free trial"
+                  : "Sign in to start Essentials 3-day free trial"}
             </Button>
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 dark:border-red-800 dark:bg-red-900/20 max-w-md">

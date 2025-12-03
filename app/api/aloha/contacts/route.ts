@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
-import { requireAuthFromRequest } from "@/lib/auth-helpers";
+import { getAuthenticatedSupabaseFromRequest } from "@/lib/auth-helpers";
 import { normalizePhoneNumber } from "@/lib/aloha/contact-memory";
 
 interface IncomingContact {
@@ -52,31 +51,73 @@ function sanitizeContacts(
 /**
  * GET /api/aloha/contacts
  *
- * Returns the current user's contact memory profiles.
+ * Returns the current user's contact memory profiles with pagination and filtering.
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuthFromRequest(request);
-    const supabase = getSupabaseServerClient();
+    const { supabaseClient, user, responseHeaders } =
+      await getAuthenticatedSupabaseFromRequest(request);
 
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+
+    // Query parameters
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+    const search = searchParams.get("search"); // name or phone
+    const filter = searchParams.get("filter"); // all | do-not-call | recent
+
+    const offset = (page - 1) * pageSize;
+
+    // Build query
+    let query = supabaseClient
       .from("contact_profiles")
-      .select("*")
+      .select("id, name, phone_number, notes, do_not_call, last_called_at, created_at, updated_at", { count: "exact" })
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    // Search filter
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`);
+    }
+
+    // Filter by type
+    if (filter === "do-not-call") {
+      query = query.eq("do_not_call", true);
+    } else if (filter === "recent") {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      query = query.gte("last_called_at", thirtyDaysAgo.toISOString());
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error("Error fetching contact profiles:", error);
       return NextResponse.json(
         { error: "Failed to load contacts" },
-        { status: 500 }
+        { status: 500, headers: responseHeaders }
       );
     }
 
+    // Map to response format
+    const items = (data || []).map(contact => ({
+      id: contact.id,
+      name: contact.name,
+      phoneNumber: contact.phone_number,
+      notes: contact.notes,
+      doNotCall: contact.do_not_call,
+      lastCalledAt: contact.last_called_at,
+      createdAt: contact.created_at,
+      updatedAt: contact.updated_at,
+    }));
+
     return NextResponse.json({
-      ok: true,
-      contacts: data || [],
-    });
+      items,
+      page,
+      pageSize,
+      total: count || 0,
+    }, { headers: responseHeaders });
   } catch (error: any) {
     console.error("Error in GET /api/aloha/contacts:", error);
     const message =
@@ -100,8 +141,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireAuthFromRequest(request);
-    const supabase = getSupabaseServerClient();
+    const { supabaseClient, user, responseHeaders } =
+      await getAuthenticatedSupabaseFromRequest(request);
+
     const body = await request.json();
 
     let incoming: IncomingContact[] = [];
@@ -117,7 +159,7 @@ export async function POST(request: NextRequest) {
     if (!incoming.length) {
       return NextResponse.json(
         { error: "No contacts provided" },
-        { status: 400 }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -126,11 +168,11 @@ export async function POST(request: NextRequest) {
     if (!sanitized.length) {
       return NextResponse.json(
         { error: "No valid phone numbers found in contacts" },
-        { status: 400 }
+        { status: 400, headers: responseHeaders }
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("contact_profiles")
       .upsert(sanitized, {
         onConflict: "user_id,phone_number",
@@ -141,7 +183,7 @@ export async function POST(request: NextRequest) {
       console.error("Error upserting contact profiles:", error);
       return NextResponse.json(
         { error: "Failed to save contacts" },
-        { status: 500 }
+        { status: 500, headers: responseHeaders }
       );
     }
 
@@ -149,7 +191,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       count: data?.length || 0,
       contacts: data || [],
-    });
+    }, { headers: responseHeaders });
   } catch (error: any) {
     console.error("Error in POST /api/aloha/contacts:", error);
     const message =
@@ -173,8 +215,9 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await requireAuthFromRequest(request);
-    const supabase = getSupabaseServerClient();
+    const { supabaseClient, user, responseHeaders } =
+      await getAuthenticatedSupabaseFromRequest(request);
+
     const body = await request.json();
 
     const { id, notes, doNotCall } = body || {};
@@ -182,7 +225,7 @@ export async function PATCH(request: NextRequest) {
     if (!id || typeof id !== "string") {
       return NextResponse.json(
         { error: "id is required" },
-        { status: 400 }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -203,11 +246,11 @@ export async function PATCH(request: NextRequest) {
     if (Object.keys(update).length === 0) {
       return NextResponse.json(
         { error: "No valid fields to update" },
-        { status: 400 }
+        { status: 400, headers: responseHeaders }
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("contact_profiles")
       .update(update)
       .eq("id", id)
@@ -219,14 +262,14 @@ export async function PATCH(request: NextRequest) {
       console.error("Error updating contact profile:", error);
       return NextResponse.json(
         { error: "Failed to update contact" },
-        { status: 500 }
+        { status: 500, headers: responseHeaders }
       );
     }
 
     return NextResponse.json({
       ok: true,
       contact: data,
-    });
+    }, { headers: responseHeaders });
   } catch (error: any) {
     console.error("Error in PATCH /api/aloha/contacts:", error);
     const message =
@@ -237,15 +280,3 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

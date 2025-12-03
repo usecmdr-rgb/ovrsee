@@ -67,9 +67,13 @@ export async function getOrCreateWorkspaceCustomer(
  * 2. Aggregates counts by tier
  * 3. Creates or updates Stripe subscription with matching items
  * 4. Applies team discounts via coupon if applicable
+ *
+ * TODO: Support yearly team billing by threading a BillingInterval parameter and
+ * choosing the correct Stripe price IDs for { planCode, billingInterval }.
  */
 export async function syncWorkspaceSubscriptionFromSeats(
-  workspaceId: string
+  workspaceId: string,
+  billingInterval: 'monthly' | 'yearly' = 'monthly'
 ): Promise<Stripe.Subscription> {
   const supabase = getSupabaseServerClient();
 
@@ -124,6 +128,8 @@ export async function syncWorkspaceSubscriptionFromSeats(
   for (const [tier, priceId] of Object.entries(tierPriceIds)) {
     if (!priceId) {
       console.warn(`Stripe price ID not configured for tier: ${tier}`);
+      // TODO: when adding yearly team billing, also validate yearly seat price IDs
+      // for the given billingInterval and log if they are missing.
     }
   }
 

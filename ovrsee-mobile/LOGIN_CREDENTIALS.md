@@ -41,3 +41,5 @@ If you see "Email not confirmed" error:
 - **"Connection error"** - Check Supabase configuration in `.env` file
 - **"User not found"** - Account doesn't exist, may need to sign up first
 
+
+

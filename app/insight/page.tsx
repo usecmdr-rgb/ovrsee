@@ -15,8 +15,7 @@ import InsightTimeline from "@/components/insight/InsightTimeline";
 import ActivityMixChart from "@/components/insight/ActivityMixChart";
 import InsightScoreWidget from "@/components/insight/InsightScoreWidget";
 import InsightMemoryPanel from "@/components/insight/InsightMemoryPanel";
-
-// timeframes will be defined inside component to use translations
+import { useInsightsOverview } from "@/hooks/useInsights";
 
 // Calculate rollup stats from actual agent stats
 function calculateRollupStats(stats: typeof emptyAgentStats, timeframe: "daily" | "weekly" | "monthly") {
@@ -48,7 +47,7 @@ const insights = {
 };
 
 export default function InsightPage() {
-  const { hasAccess, isLoading: accessLoading } = useAgentAccess("insight");
+  const { hasAccess, isLoading: accessLoading, isSuperAdmin } = useAgentAccess("insight");
   const { stats, loading, error } = useAgentStats();
   const { mode: accountMode, loading: accountModeLoading } = useAccountMode();
   const t = useTranslation();
@@ -59,39 +58,82 @@ export default function InsightPage() {
   // Determine if user is in preview mode based on account mode
   const isPreview = isAccessReady && accountMode === 'preview';
   
-  // Check if trial is expired
-  const isTrialExpired = isAccessReady && accountMode === 'trial-expired';
+  // Check if trial is expired - but don't show for super admins or users with active subscriptions/trials
+  // Note: account mode API already returns 'subscribed' for super admins, but we check isSuperAdmin as a safety measure
+  const isTrialExpired = isAccessReady && 
+    accountMode === 'trial-expired' && 
+    !isSuperAdmin;
   
-  // Determine which stats to use based on account mode
-  // Preview mode: use mock data
-  // Trial-active, trial-expired, subscribed: use real stats (starting from 0 at activation)
+  // For authenticated users, always use real stats (or empty stats if no data)
+  // Never show fake numbers for authenticated users
   const latestStats = useMemo(() => {
     if (!isAccessReady) {
       // Return empty stats while loading to prevent flash
       return emptyAgentStats;
     }
-    // In preview mode, use mock stats
-    // In all other modes (trial-active, trial-expired, subscribed), use real stats
-    if (isPreview) {
-      return {
-        ...emptyAgentStats,
-        alpha_calls_total: 156, // Mock calls for demo
-        alpha_calls_missed: 5, // Mock missed calls
-        alpha_appointments: 18, // Mock appointments
-        xi_important_emails: 42, // Mock important emails
-        xi_missed_emails: 3, // Mock missed emails
-        xi_payments_bills: 8, // Mock payments/bills
-        xi_invoices: 4, // Mock invoices
-        mu_media_edits: 87, // Mock media edits
-        beta_insights_count: 28, // Mock insights count
-      };
+    
+    // If we have real stats, use them
+    if (stats) {
+      return stats;
     }
-    // Use real stats (will be 0 if no activity since activation)
-    return stats ?? emptyAgentStats;
-  }, [isAccessReady, isPreview, stats]);
+    
+    // If no stats and user is authenticated, return empty stats (0s)
+    // Only use fallback for preview mode (unauthenticated users)
+    if (isPreview) {
+      return emptyAgentStats;
+    }
+    
+    // For authenticated users with no stats yet, return empty stats
+    return emptyAgentStats;
+  }, [stats, isAccessReady, isPreview]);
   const noStats = !stats && !loading && !error;
   const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly">("daily");
   const current = useMemo(() => calculateRollupStats(latestStats, timeframe), [latestStats, timeframe]);
+
+  // Calculate date range for insights API based on timeframe
+  const dateRange = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    let fromDate: Date;
+    if (timeframe === "daily") {
+      fromDate = new Date(today);
+      fromDate.setDate(fromDate.getDate() - 1);
+    } else if (timeframe === "weekly") {
+      fromDate = new Date(today);
+      fromDate.setDate(fromDate.getDate() - 7);
+    } else {
+      fromDate = new Date(today);
+      fromDate.setDate(fromDate.getDate() - 30);
+    }
+    fromDate.setHours(0, 0, 0, 0);
+    
+    return {
+      from: fromDate.toISOString().split("T")[0],
+      to: today.toISOString().split("T")[0],
+    };
+  }, [timeframe]);
+
+  // Fetch insights data from new backend
+  const insightsData = useInsightsOverview(dateRange);
+
+  // Calculate metrics from insights data if available, otherwise use rollup stats
+  const metrics = useMemo(() => {
+    if (insightsData.data?.totals) {
+      const totals = insightsData.data.totals;
+      return {
+        calls: totals.callsTotal || 0,
+        emails: totals.emailsReceivedTotal || 0,
+        media: (totals.studioEditsTotal || 0) + (totals.studioPostsTotal || 0),
+        timeSaved: totals.timeSavedHours || 0,
+        insightsGenerated: totals.insightsGeneratedTotal || 0,
+      };
+    }
+    return {
+      ...current,
+      insightsGenerated: latestStats.beta_insights_count || 0,
+    };
+  }, [insightsData.data, current, latestStats.beta_insights_count]);
 
   const agentConfig = AGENT_BY_ID["insight"];
   
@@ -121,7 +163,7 @@ export default function InsightPage() {
           {timeframes.map((group) => (
             <button
               key={group.id}
-              onClick={() => setTimeframe(group.id as keyof typeof stats)}
+              onClick={() => setTimeframe(group.id as "daily" | "weekly" | "monthly")}
               className={`rounded-full px-4 py-2 ${
                 timeframe === group.id
                   ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
@@ -139,38 +181,73 @@ export default function InsightPage() {
           {!isPreview && loading && <span className="text-xs text-slate-500">{t("loadingStats")}</span>}
           {!isPreview && error && <span className="text-xs text-red-500">{t("couldntLoadStats")}</span>}
           {!isPreview && noStats && <span className="text-xs text-slate-500">{t("noStatsYet")}</span>}
+          {insightsData.loading && <span className="text-xs text-slate-500">Loading insights…</span>}
+          {insightsData.error && <span className="text-xs text-red-500">Insights temporarily unavailable</span>}
         </div>
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 p-4 text-center dark:border-slate-800 dark:bg-slate-900/60">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightInsightsGenerated")}</p>
-          <p className="mt-2 text-3xl font-semibold">{latestStats.beta_insights_count}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("insightHasGenerated")} {latestStats.beta_insights_count} {t("insightInsightsThisPeriod")}</p>
+          <p className="mt-2 text-3xl font-semibold">
+            {insightsData.loading ? "..." : metrics.insightsGenerated}
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
+            {t("insightHasGenerated")} {insightsData.loading ? "..." : metrics.insightsGenerated} {t("insightInsightsThisPeriod")}
+          </p>
+          {insightsData.error && (
+            <p className="mt-1 text-xs text-red-500">Couldn&apos;t load</p>
+          )}
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightCalls")}</p>
-          <p className="mt-2 text-2xl">{current.calls}</p>
+          <p className="mt-2 text-2xl">
+            {insightsData.loading ? "..." : metrics.calls}
+          </p>
           <p className="text-xs text-slate-500">{t("insightFromAloha")}</p>
+          {insightsData.error && (
+            <p className="mt-1 text-xs text-red-500">Couldn&apos;t load</p>
+          )}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightEmails")}</p>
-          <p className="mt-2 text-2xl">{current.emails}</p>
+          <p className="mt-2 text-2xl">
+            {insightsData.loading ? "..." : metrics.emails}
+          </p>
           <p className="text-xs text-slate-500">{t("insightFromSync")}</p>
+          {insightsData.error && (
+            <p className="mt-1 text-xs text-red-500">Couldn&apos;t load</p>
+          )}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightMediaItems")}</p>
-          <p className="mt-2 text-2xl">{current.media}</p>
+          <p className="mt-2 text-2xl">
+            {insightsData.loading ? "..." : metrics.media}
+          </p>
           <p className="text-xs text-slate-500">{t("insightFromStudio")}</p>
+          {insightsData.error && (
+            <p className="mt-1 text-xs text-red-500">Couldn&apos;t load</p>
+          )}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/40">
           <p className="text-xs uppercase tracking-widest text-slate-500">{t("insightTimeSaved")}</p>
-          <p className="mt-2 text-2xl">{current.timeSaved} {t("insightHrs")}</p>
+          <p className="mt-2 text-2xl">
+            {insightsData.loading ? "..." : `${metrics.timeSaved.toFixed(1)} ${t("insightHrs")}`}
+          </p>
           <p className="text-xs text-slate-500">{t("insightInsightEstimate")}</p>
+          {insightsData.error && (
+            <p className="mt-1 text-xs text-red-500">Couldn&apos;t load</p>
+          )}
         </div>
       </section>
       <section className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
         <InsightTimeline range={timeframe} isPreview={isPreview} />
-        <ActivityMixChart range={timeframe} isPreview={isPreview} />
+        <ActivityMixChart 
+          range={timeframe} 
+          isPreview={isPreview}
+          overviewData={insightsData.data}
+          overviewLoading={insightsData.loading}
+          overviewError={insightsData.error}
+        />
       </section>
 
       {/* Insight Intelligence Features - Disabled in preview mode */}

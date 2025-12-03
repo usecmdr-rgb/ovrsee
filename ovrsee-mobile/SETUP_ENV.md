@@ -77,3 +77,5 @@ Once the `.env` file is created with the correct values:
 - Verify values match your web app exactly
 - Restart Expo with cache cleared: `npx expo start -c`
 
+
+

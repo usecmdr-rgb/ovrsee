@@ -12,6 +12,7 @@ import { getWorkspaceIdFromAuth } from "@/lib/workspace-helpers";
 import { getMemoryFacts, getImportantRelationships } from "@/lib/insight/memory";
 import { openai } from "@/lib/openai";
 import { AGENT_CONFIG } from "@/lib/agents/config";
+import { getOrCreateWorkspace } from "@/lib/sync/integrations";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,11 +58,11 @@ export async function POST(request: NextRequest) {
       .limit(20);
 
     const { data: calendarEvents } = await supabase
-      .from("calendar_events")
+      .from("sync_calendar_events")
       .select("*")
-      .eq("user_id", user.id)
-      .gte("start_time", new Date().toISOString())
-      .order("start_time", { ascending: true })
+      .eq("workspace_id", workspaceId)
+      .gte("start_at", new Date().toISOString())
+      .order("start_at", { ascending: true })
       .limit(10);
 
     // Get memory facts and relationships
@@ -80,8 +81,8 @@ export async function POST(request: NextRequest) {
         receivedAt: e.created_at,
       })),
       calendar: (calendarEvents || []).map((e) => ({
-        title: e.summary || e.title,
-        start: e.start_time,
+        title: e.summary,
+        start: e.start_at,
         location: e.location,
       })),
       memory: {

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import Modal from "@/components/ui/Modal";
 import { formatPrice } from "@/lib/currency";
 import { useAppState } from "@/context/AppStateContext";
-import { TIERS, type TierId, type PricingBreakdown, calculateTeamPricing } from "@/lib/pricing";
+import { TIERS, type TierId, type PricingBreakdown } from "@/lib/pricing";
 import type { SeatSelection } from "@/lib/pricing";
 import { runGuardrailChecks, deriveFeatureUsage, detectFeatureUsage, type GuardrailContext } from "@/lib/subscription/guardrails";
 
@@ -34,6 +34,7 @@ export default function TeamSeatsSection() {
   const [seats, setSeats] = useState<Seat[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null);
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -414,6 +415,29 @@ export default function TeamSeatsSection() {
                   </div>
                 );
               })}
+              {/* Billing interval toggle (preview only, currently monthly pricing on backend) */}
+              <div className="flex items-center justify-end mb-2 gap-2">
+                <button
+                  onClick={() => setBillingInterval('monthly')}
+                  className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                    billingInterval === 'monthly'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setBillingInterval('yearly')}
+                  className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                    billingInterval === 'yearly'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Yearly – Save 1 Month
+                </button>
+              </div>
               <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex justify-between mb-1">
                   <span className="text-slate-600 dark:text-slate-400">List Price</span>
@@ -432,7 +456,9 @@ export default function TeamSeatsSection() {
                   <span>{formatPrice(pricing.finalTotal, language)}</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  per month • Each user is billed based on their tier
+                  {billingInterval === 'yearly'
+                    ? "per year (preview) • Each user is billed based on their tier • Backend pricing is still monthly until yearly team billing is enabled."
+                    : "per month • Each user is billed based on their tier"}
                 </p>
               </div>
             </div>

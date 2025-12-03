@@ -9,7 +9,7 @@ function createStripe(): Stripe {
     throw new Error("STRIPE_SECRET_KEY is not set");
   }
   return new Stripe(key, {
-    apiVersion: "2023-10-16",
+    apiVersion: "2024-06-20",
     typescript: true,
   });
 }

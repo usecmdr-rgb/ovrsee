@@ -1,0 +1,82 @@
+### Sync Backend API Test Script
+### Use with REST Client extension (VS Code) or similar HTTP client
+### 
+### Prerequisites:
+### 1. Start your dev server: npm run dev
+### 2. Log in to get AUTH_COOKIE (visit http://localhost:3000 and log in)
+### 3. Copy the auth cookie value and replace {{AUTH_COOKIE}} below
+### 4. Install googleapis: npm install googleapis
+
+@baseUrl = http://localhost:3000
+@authCookie = {{AUTH_COOKIE}}  # Replace with actual cookie value from browser
+
+### 1) Get current user info (check auth cookie / token setup)
+GET {{baseUrl}}/api/me
+Cookie: {{authCookie}}
+
+###
+
+### 2) Get Google OAuth URL
+GET {{baseUrl}}/api/sync/google/oauth-url?returnTo=%2Fsync
+Cookie: {{authCookie}}
+
+###
+### After you call the OAuth URL in your browser and complete the Google consent flow,
+### Google will redirect back to /api/sync/google/callback and your integration will be stored.
+### Then you can run the next ones.
+
+### 3) Start Gmail initial sync job
+POST {{baseUrl}}/api/sync/gmail/start
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{}
+
+###
+
+### 4) Start Calendar initial sync job
+POST {{baseUrl}}/api/sync/calendar/start
+Content-Type: application/json
+Cookie: {{authCookie}}
+
+{}
+
+###
+
+### 5) Process a single pending sync job (internal worker)
+POST {{baseUrl}}/api/internal/sync/run-once
+Content-Type: application/json
+# If this route requires some INTERNAL_SECRET header, add it here:
+# X-Internal-Secret: YOUR_SECRET_HERE
+
+{}
+
+###
+
+### 6) List synced Gmail messages
+GET {{baseUrl}}/api/sync/gmail/messages?limit=20
+Cookie: {{authCookie}}
+
+###
+
+### 7) List synced Calendar events for the next 7 days
+### Replace {{TODAY}} and {{IN_7_DAYS}} with actual ISO dates
+GET {{baseUrl}}/api/sync/calendar/events?from=2025-01-16T00:00:00Z&to=2025-01-23T23:59:59Z
+Cookie: {{authCookie}}
+
+###
+
+### 8) List Gmail messages with search query
+GET {{baseUrl}}/api/sync/gmail/messages?limit=10&query=important
+Cookie: {{authCookie}}
+
+###
+
+### 9) List Gmail messages with date range
+GET {{baseUrl}}/api/sync/gmail/messages?limit=20&after=2025-01-01T00:00:00Z&before=2025-01-16T23:59:59Z
+Cookie: {{authCookie}}
+
+###
+
+
+

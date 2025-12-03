@@ -9,3 +9,5 @@ export async function getAgentSummaries(): Promise<ApiResponse<AgentSummary[]>> 
   // Must return agents in correct order: Sync → Aloha → Studio → Insights
   return httpRequest<AgentSummary[]>("/summary/agents");
 }
+
+
