@@ -348,6 +348,8 @@ export default function AlohaSettingsPage() {
     voicePreviewSourcesRef.current = voicePreviewSources;
   }, [voicePreviewSources]);
 
+  // We intentionally run the initial data fetch only once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchData();
   }, []);

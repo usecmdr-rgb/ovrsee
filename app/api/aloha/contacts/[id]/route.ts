@@ -7,15 +7,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedSupabaseFromRequest } from "@/lib/auth-helpers";
 
+// Note: Next.js App Router's route handler context typing can be finicky across versions.
+// We accept a generic `context` object here and safely extract `params.id` at runtime.
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: any
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
       await getAuthenticatedSupabaseFromRequest(request);
 
-    const contactId = params.id;
+    const contactId: string | undefined = context?.params?.id;
 
     if (!contactId) {
       return NextResponse.json(
