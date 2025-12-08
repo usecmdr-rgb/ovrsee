@@ -15,18 +15,31 @@ import {
   calculateTeamPricing,
   getTeamDiscountPercent,
 } from "@/lib/pricing";
+import { getPlanAmount } from "@/lib/pricingConfig";
+import { calculateTax, formatTaxRate, getTaxDisclaimer, DEFAULT_TAX_RATE } from "@/lib/tax";
 
+/**
+ * Seat configuration for team subscriptions
+ * Each seat can have an optional name and email for invite creation
+ * Email is optional - seats can be assigned later from Team settings
+ */
 interface SeatRow {
   id: string;
   tier: TierId;
   name?: string;
-  email?: string;
+  email?: string; // Optional - if provided, will be used to send activation invites after checkout
 }
 
 function TeamPricingContent() {
   const { language } = useAppState();
   const t = useTranslation();
   const searchParams = useSearchParams();
+  
+  // Get billing interval from URL params or default to monthly
+  const billingIntervalFromUrl = searchParams.get("billingInterval") as "monthly" | "yearly" | null;
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">(
+    billingIntervalFromUrl === "yearly" ? "yearly" : "monthly"
+  );
   
   // Initialize seats from URL params if available (from recommendation)
   const initialSeats = useMemo(() => {
@@ -45,7 +58,7 @@ function TeamPricingContent() {
         // Create individual seats for each count
         for (let i = 0; i < countNum; i++) {
           seats.push({
-            id: `${idx}_${i}_${Date.now()}`,
+            id: `${idx}_${i}_${Date.now()}_${Math.random()}`,
             tier: tier,
           });
         }
@@ -57,6 +70,14 @@ function TeamPricingContent() {
   }, [searchParams]);
   
   const [seats, setSeats] = useState<SeatRow[]>(initialSeats);
+  
+  // Update billing interval when URL param changes
+  useEffect(() => {
+    const urlInterval = searchParams.get("billingInterval") as "monthly" | "yearly" | null;
+    if (urlInterval === "yearly" || urlInterval === "monthly") {
+      setBillingInterval(urlInterval);
+    }
+  }, [searchParams]);
 
   // Convert seats to SeatSelection format for calculation
   const seatSelections = useMemo((): SeatSelection[] => {
@@ -78,10 +99,19 @@ function TeamPricingContent() {
       }));
   }, [seats]);
 
-  // Calculate pricing breakdown
+  // Calculate pricing breakdown with billing interval
   const pricing = useMemo(() => {
-    return calculateTeamPricing(seatSelections);
-  }, [seatSelections]);
+    return calculateTeamPricing(seatSelections, billingInterval);
+  }, [seatSelections, billingInterval]);
+  
+  // Calculate tax (for display purposes - actual tax calculated by Stripe)
+  const taxAmount = useMemo(() => {
+    return calculateTax(pricing.finalTotal, DEFAULT_TAX_RATE);
+  }, [pricing.finalTotal]);
+  
+  const totalWithTax = useMemo(() => {
+    return pricing.finalTotal + taxAmount;
+  }, [pricing.finalTotal, taxAmount]);
 
   const addSeat = () => {
     const newId = `${Date.now()}`;
@@ -126,6 +156,30 @@ function TeamPricingContent() {
             </span>
           </div>
         )}
+        
+        {/* Billing Interval Toggle */}
+        <div className="flex items-center gap-3 justify-center mt-4">
+          <button
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              billingInterval === "monthly"
+                ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+            }`}
+            onClick={() => setBillingInterval("monthly")}
+          >
+            Monthly
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              billingInterval === "yearly"
+                ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+            }`}
+            onClick={() => setBillingInterval("yearly")}
+          >
+            Yearly
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -174,11 +228,14 @@ function TeamPricingContent() {
                       </label>
                       <input
                         type="email"
-                        placeholder={t("teamPricingEmailPlaceholder")}
+                        placeholder={t("teamPricingEmailPlaceholder") || "user@example.com"}
                         value={seat.email || ""}
                         onChange={(e) => updateSeatEmail(seat.id, e.target.value)}
                         className="w-full px-3 py-2 text-sm border rounded-md bg-background"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Optional - leave blank to assign later
+                      </p>
                     </div>
                   </div>
                   
@@ -196,15 +253,42 @@ function TeamPricingContent() {
                       >
                         <option value="basic">
                           {TIERS.basic.name} (
-                          {formatPrice(TIERS.basic.priceMonthly, language)}/mo)
+                          {(() => {
+                            const tierToPlanCode: Record<TierId, "essentials" | "professional" | "executive"> = {
+                              basic: "essentials",
+                              advanced: "professional",
+                              elite: "executive",
+                            };
+                            const amount = getPlanAmount(tierToPlanCode.basic, billingInterval);
+                            const period = billingInterval === "yearly" ? "/yr" : "/mo";
+                            return formatPrice(amount / 100, language) + period;
+                          })()})
                         </option>
                         <option value="advanced">
                           {TIERS.advanced.name} (
-                          {formatPrice(TIERS.advanced.priceMonthly, language)}/mo)
+                          {(() => {
+                            const tierToPlanCode: Record<TierId, "essentials" | "professional" | "executive"> = {
+                              basic: "essentials",
+                              advanced: "professional",
+                              elite: "executive",
+                            };
+                            const amount = getPlanAmount(tierToPlanCode.advanced, billingInterval);
+                            const period = billingInterval === "yearly" ? "/yr" : "/mo";
+                            return formatPrice(amount / 100, language) + period;
+                          })()})
                         </option>
                         <option value="elite">
                           {TIERS.elite.name} (
-                          {formatPrice(TIERS.elite.priceMonthly, language)}/mo)
+                          {(() => {
+                            const tierToPlanCode: Record<TierId, "essentials" | "professional" | "executive"> = {
+                              basic: "essentials",
+                              advanced: "professional",
+                              elite: "executive",
+                            };
+                            const amount = getPlanAmount(tierToPlanCode.elite, billingInterval);
+                            const period = billingInterval === "yearly" ? "/yr" : "/mo";
+                            return formatPrice(amount / 100, language) + period;
+                          })()})
                         </option>
                       </select>
                     </div>
@@ -325,7 +409,12 @@ function TeamPricingContent() {
                     <span className="text-muted-foreground">
                       {t("teamPricingListPrice")}
                     </span>
-                    <span>{formatPrice(pricing.listSubtotal, language)}</span>
+                    <span>
+                      {formatPrice(pricing.listSubtotal, language)}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        {billingInterval === "yearly" ? "/yr" : "/mo"}
+                      </span>
+                    </span>
                   </div>
 
                   {pricing.discountPercent > 0 && (
@@ -344,18 +433,39 @@ function TeamPricingContent() {
                         </span>
                         <span className="text-emerald-600 dark:text-emerald-400">
                           -{formatPrice(pricing.discountAmount, language)}
+                          <span className="text-xs ml-1">
+                            {billingInterval === "yearly" ? "/yr" : "/mo"}
+                          </span>
                         </span>
                       </div>
                     </>
                   )}
 
+                  {/* Tax Line - Show even if 0% for transparency */}
+                  <div className="flex justify-between text-sm pt-2 border-t">
+                    <span className="text-muted-foreground">
+                      Sales Tax {DEFAULT_TAX_RATE > 0 ? `(${formatTaxRate(DEFAULT_TAX_RATE)})` : "(calculated at checkout)"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {DEFAULT_TAX_RATE > 0 ? formatPrice(taxAmount, language) : "—"}
+                    </span>
+                  </div>
+                  
                   <div className="flex justify-between pt-2 border-t font-semibold text-lg">
                     <span>{t("teamPricingTotal")}</span>
-                    <span>{formatPrice(pricing.finalTotal, language)}</span>
+                    <span>
+                      {formatPrice(DEFAULT_TAX_RATE > 0 ? totalWithTax : pricing.finalTotal, language)}
+                      <span className="text-sm font-normal text-muted-foreground ml-1">
+                        {billingInterval === "yearly" ? "/yr" : "/mo"}
+                      </span>
+                    </span>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("teamPricingPerMonth")}
-                  </div>
+                  
+                  {DEFAULT_TAX_RATE === 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {getTaxDisclaimer()}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -372,6 +482,73 @@ function TeamPricingContent() {
               {pricing.totalSeats === 0 && (
                 <div className="text-sm text-muted-foreground text-center py-4">
                   {t("teamPricingAddSeatsToSee")}
+                </div>
+              )}
+
+              {/* Start Subscription Button */}
+              {pricing.totalSeats > 0 && (
+                <div className="pt-4 border-t">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    You can leave emails blank and assign seats later from your Team settings.
+                  </p>
+                  <Button
+                    onClick={async () => {
+                      // Get the highest tier for planCode (for now, use the most common tier)
+                      const tierCounts = seatSelections.reduce((acc, s) => {
+                        acc[s.tier] = (acc[s.tier] || 0) + s.count;
+                        return acc;
+                      }, {} as Record<TierId, number>);
+                      
+                      const highestTier = (Object.entries(tierCounts).sort((a, b) => {
+                        const tierOrder = { elite: 3, advanced: 2, basic: 1 };
+                        return tierOrder[b[0] as TierId] - tierOrder[a[0] as TierId];
+                      })[0]?.[0] || "basic") as TierId;
+                      
+                      const planCodeMap: Record<TierId, "essentials" | "professional" | "executive"> = {
+                        basic: "essentials",
+                        advanced: "professional",
+                        elite: "executive",
+                      };
+                      
+                      const planCode = planCodeMap[highestTier];
+                      const totalSeatCount = pricing.totalSeats;
+                      
+                      // Prepare seat data with emails
+                      const seatData = seats.map(seat => ({
+                        tier: seat.tier,
+                        email: seat.email || undefined,
+                        name: seat.name || undefined,
+                      }));
+                      
+                      try {
+                        const response = await fetch("/api/stripe/checkout", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            planCode,
+                            seatCount: totalSeatCount,
+                            billingInterval, // Use selected billing interval
+                            seats: seatData, // Include seat emails and names
+                          }),
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (!response.ok) {
+                          throw new Error(data.error || "Failed to create checkout session");
+                        }
+                        
+                        if (data.url) {
+                          window.location.href = data.url;
+                        }
+                      } catch (err: any) {
+                        alert(err.message || "Failed to start checkout");
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    Start Subscription
+                  </Button>
                 </div>
               )}
             </CardContent>

@@ -3,6 +3,24 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/studio/publish",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/studio/metrics-refresh",
+      "schedule": "0 */6 * * *"
+    },
+            {
+              "path": "/api/cron/studio/weekly-report",
+              "schedule": "0 9 * * 1"
+            },
+            {
+              "path": "/api/cron/studio/competitors-refresh",
+              "schedule": "0 2 * * *"
+            }
+  ]
 }
 

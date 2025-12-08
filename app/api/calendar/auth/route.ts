@@ -2,11 +2,38 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { getOAuthRedirectUri } from "@/lib/oauth-helpers";
 
+/**
+ * ⚠️ DEPRECATED: This route is deprecated. Use /api/sync/google/oauth-url instead.
+ * 
+ * This legacy endpoint is kept for backward compatibility but should not be used for new integrations.
+ * The unified Google OAuth flow at /api/sync/google/* provides:
+ * - Combined Gmail + Calendar authorization
+ * - Better token management in integrations table
+ * - Consistent error handling
+ * 
+ * This endpoint will return 410 Gone.
+ */
 // Google Calendar OAuth configuration
 const CALENDAR_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.GMAIL_CLIENT_ID || "";
 const CALENDAR_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET || "";
 
 export async function GET(request: NextRequest) {
+  // Deprecation: Return error directing to unified route
+  return NextResponse.json(
+    {
+      error: "DEPRECATED",
+      message: "This endpoint is deprecated. Use /api/sync/google/oauth-url instead.",
+      migration: {
+        oldRoute: "/api/calendar/auth",
+        newRoute: "/api/sync/google/oauth-url",
+        reason: "Unified Google OAuth flow supports both Gmail and Calendar with better token management",
+        documentation: "See GOOGLE_OAUTH_COMPREHENSIVE_AUDIT.md for migration guide",
+      },
+    },
+    { status: 410 } // 410 Gone
+  );
+
+  /* LEGACY CODE BELOW - Not executed but kept for reference
   try {
     // Validate client ID is configured
     if (!CALENDAR_CLIENT_ID || CALENDAR_CLIENT_ID === "your_google_client_id_here" || CALENDAR_CLIENT_ID.includes("your_")) {
@@ -113,5 +140,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+  */
 }
 

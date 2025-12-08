@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { getWorkspaceIntegration, getOrCreateWorkspace } from "@/lib/sync/integrations";
 
 /**
  * GET /api/gmail/status
  * Get Gmail connection status for the current user
+ * Now uses the integrations table instead of gmail_connections
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,14 +30,31 @@ export async function GET(request: NextRequest) {
 
     const userId = userResult.user.id;
 
-    // Check for Gmail connection
-    const { data: connection, error: connectionError } = await supabase
-      .from("gmail_connections")
-      .select("last_sync_at, sync_status, sync_error, last_history_id, access_token, refresh_token, expires_at")
-      .eq("user_id", userId)
-      .single();
+    // Get or create workspace for user
+    let workspace;
+    try {
+      workspace = await getOrCreateWorkspace(userId);
+    } catch (error: any) {
+      console.error("[Gmail Status] Error getting workspace:", error);
+      return NextResponse.json({
+        connected: false,
+        lastSyncAt: null,
+        syncStatus: null,
+        syncError: null,
+        lastHistoryId: null,
+      });
+    }
 
-    if (connectionError || !connection) {
+    // Check for Gmail integration in the integrations table
+    let integration;
+    try {
+      integration = await getWorkspaceIntegration(workspace.id, "gmail");
+    } catch (error: any) {
+      // Integration not found is okay - means not connected
+      console.log("[Gmail Status] No Gmail integration found for workspace:", workspace.id);
+    }
+
+    if (!integration) {
       return NextResponse.json({
         connected: false,
         lastSyncAt: null,
@@ -46,16 +65,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if tokens are valid (access token exists and not expired)
-    const hasValidTokens = connection.access_token && 
-      connection.refresh_token && 
-      (!connection.expires_at || new Date(connection.expires_at) > new Date());
+    const hasValidTokens = integration.access_token && 
+      integration.refresh_token && 
+      (!integration.token_expires_at || new Date(integration.token_expires_at) > new Date());
 
     return NextResponse.json({
-      connected: hasValidTokens,
-      lastSyncAt: connection.last_sync_at,
-      syncStatus: connection.sync_status || "idle",
-      syncError: connection.sync_error,
-      lastHistoryId: connection.last_history_id,
+      connected: hasValidTokens && integration.is_active,
+      lastSyncAt: integration.last_synced_at,
+      syncStatus: integration.sync_status || "idle",
+      syncError: integration.last_error,
+      lastHistoryId: null, // Not stored in integrations table, would need to add if needed
     });
   } catch (error: any) {
     console.error("Error getting Gmail status:", error);

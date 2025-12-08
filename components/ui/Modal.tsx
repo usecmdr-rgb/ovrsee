@@ -115,13 +115,13 @@ const Modal = ({ title, open, onClose, description, size = "md", children }: Mod
     >
       <div
         ref={modalRef}
-        className={`modal-panel w-full max-w-[calc(100vw-2rem)] sm:max-w-2xl ${size === "lg" ? "lg:max-w-3xl" : ""}`}
+        className={`modal-panel w-full max-w-[calc(100vw-2rem)] ${size === "lg" ? "sm:max-w-2xl lg:max-w-3xl" : "sm:max-w-lg"}`}
       >
-        <div className="mb-4 flex items-start justify-between">
+        <div className="mb-5 flex items-start justify-between">
           <div>
-            <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+            <h2 id={titleId} className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
             {description && (
-              <p id={descriptionId} className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+              <p id={descriptionId} className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>
             )}
           </div>
           <button
@@ -133,7 +133,7 @@ const Modal = ({ title, open, onClose, description, size = "md", children }: Mod
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+        <div className="max-h-[65vh] overflow-y-auto pr-1">
           {children}
         </div>
       </div>

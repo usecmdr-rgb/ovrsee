@@ -108,19 +108,6 @@ export default function ActivityMixChart({
       </div>
     );
   }
-  
-  if (isUnauthorized && !shouldShowTrialLock) {
-    // If unauthorized but shouldn't show trial lock (super admin or active subscription),
-    // show a generic error or empty state
-    return (
-      <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-        <h2 className="text-lg font-semibold mb-4">Calls vs Emails</h2>
-        <div className="h-32 flex items-center justify-center text-sm text-slate-500">
-          No data available
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (

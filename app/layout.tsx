@@ -11,7 +11,7 @@ import BillingModal from "@/components/modals/BillingModal";
 import SettingsModal from "@/components/modals/SettingsModal";
 import TermsModal from "@/components/modals/TermsModal";
 import { SupabaseProvider } from "@/components/SupabaseProvider";
-import DataRetentionBanner from "@/components/subscription/DataRetentionBanner";
+import DataRetentionBannerWrapper from "@/components/subscription/DataRetentionBannerWrapper";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://ovrsee.dev"),
@@ -96,11 +96,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Skip to main content
               </a>
               <Header />
-              <DataRetentionBanner />
+              <DataRetentionBannerWrapper />
               <main
                 id="main-content"
                 className="site-main mx-auto min-h-screen max-w-6xl px-4 pb-12 sm:px-6 sm:pb-16 overflow-x-hidden"
-                style={{ paddingTop: "var(--page-top-padding, 5rem)" }}
+                style={{ 
+                  paddingTop: "calc(var(--page-top-padding, 5rem) + var(--banner-height, 0px))" 
+                }}
               >
                 {children}
               </main>

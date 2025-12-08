@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createUserAccount } from "@/lib/auth/signup";
 import { getUserSession } from "@/lib/auth/session";
+import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 /**
  * POST /api/auth/signup
@@ -35,6 +36,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if email already exists in Supabase Auth
+    const supabase = getSupabaseServerClient();
+    try {
+      // Use admin API to check if user exists
+      const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
+      
+      if (!listError && existingUsers?.users) {
+        const emailExists = existingUsers.users.some(
+          (user) => user.email?.toLowerCase() === email.toLowerCase()
+        );
+        
+        if (emailExists) {
+          return NextResponse.json(
+            { error: "An account with this email already exists" },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (checkError: any) {
+      console.error("Error checking for existing email:", checkError);
+      // Continue with signup attempt - Supabase will also check and return appropriate error
+    }
+
     // Create user account (this will trigger database triggers to create profile and subscription)
     const { user } = await createUserAccount({
       email,
@@ -56,12 +80,36 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Signup error:", error);
+    console.error("Signup error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      cause: error.cause,
+    });
 
     // Handle specific Supabase errors
-    if (error.message?.includes("already registered")) {
+    if (error.message?.includes("already registered") || error.message?.includes("already exists")) {
       return NextResponse.json(
         { error: "An account with this email already exists" },
         { status: 409 }
+      );
+    }
+
+    // Check for database/constraint errors
+    if (error.message?.includes("violates") || error.message?.includes("constraint")) {
+      console.error("Database constraint violation:", error);
+      return NextResponse.json(
+        { error: "Account creation failed due to a database error. Please contact support." },
+        { status: 500 }
+      );
+    }
+
+    // Check for missing service role key
+    if (error.message?.includes("Supabase configuration is missing") || error.message?.includes("SERVICE_ROLE_KEY")) {
+      console.error("Missing Supabase configuration:", error);
+      return NextResponse.json(
+        { error: "Server configuration error. Please contact support." },
+        { status: 500 }
       );
     }
 

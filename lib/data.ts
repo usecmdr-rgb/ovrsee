@@ -36,6 +36,7 @@ export const agents: AgentInfo[] = [
 ];
 
 export const defaultBusinessInfo: BusinessInfo = {
+  fullName: "",
   businessName: "",
   businessType: "",
   location: "",

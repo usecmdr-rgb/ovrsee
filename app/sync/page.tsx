@@ -12,10 +12,17 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { getLanguageFromLocale } from "@/lib/localization";
 import { isDemoMode } from "@/lib/config/demoMode";
 import { useAccountMode } from "@/hooks/useAccountMode";
-import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2, RotateCcw, ChevronDown, ChevronUp, Star, Bell, DollarSign, Receipt, Megaphone, RefreshCw, Circle, Repeat, Search, TrendingUp, ArrowRight, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import SyncIntelligence from "@/components/sync/SyncIntelligence";
 import SendEmailModal from "@/components/sync/SendEmailModal";
 import EditDraftModal from "@/components/sync/EditDraftModal";
+import TodayDashboard from "@/components/sync/TodayDashboard";
+import LeadManagementPanel from "@/components/sync/LeadManagementPanel";
+import BusinessInfoBanner from "@/components/sync/BusinessInfoBanner";
+import { CATEGORY_CONFIG, getAllCategories, getCategoryConfig, type EmailCategory } from "@/lib/sync/categoryUi";
+import { Clock } from "lucide-react";
+import { isFollowUpSuggestionsEnabled, isLeadScoringEnabled, isTodayDashboardEnabled, isAiCopilotEnabled } from "@/lib/sync/featureFlags";
 import {
   getLocalDateString,
   getEventLocalDate,
@@ -126,8 +133,641 @@ interface CustomAlert {
   reminder?: string;
 }
 
+// Category configuration with icons and color tokens
+const CATEGORY_CONFIG = {
+  important: {
+    icon: Star,
+    color: "#ef4444",
+    bgColor: "bg-red-50 dark:bg-red-950/20",
+    textColor: "text-red-700 dark:text-red-300",
+    borderColor: "border-red-200 dark:border-red-800",
+  },
+  missed_unread: {
+    icon: Bell,
+    color: "#fb923c",
+    bgColor: "bg-orange-50 dark:bg-orange-950/20",
+    textColor: "text-orange-700 dark:text-orange-300",
+    borderColor: "border-orange-200 dark:border-orange-800",
+  },
+  payment_bill: {
+    icon: DollarSign,
+    color: "#22c55e",
+    bgColor: "bg-green-50 dark:bg-green-950/20",
+    textColor: "text-green-700 dark:text-green-300",
+    borderColor: "border-green-200 dark:border-green-800",
+  },
+  invoice: {
+    icon: Receipt,
+    color: "#a855f7",
+    bgColor: "bg-purple-50 dark:bg-purple-950/20",
+    textColor: "text-purple-700 dark:text-purple-300",
+    borderColor: "border-purple-200 dark:border-purple-800",
+  },
+  marketing: {
+    icon: Megaphone,
+    color: "#3b82f6",
+    bgColor: "bg-blue-50 dark:bg-blue-950/20",
+    textColor: "text-blue-700 dark:text-blue-300",
+    borderColor: "border-blue-200 dark:border-blue-800",
+  },
+  updates: {
+    icon: RefreshCw,
+    color: "#06b6d4",
+    bgColor: "bg-cyan-50 dark:bg-cyan-950/20",
+    textColor: "text-cyan-700 dark:text-cyan-300",
+    borderColor: "border-cyan-200 dark:border-cyan-800",
+  },
+  other: {
+    icon: Circle,
+    color: "#94a3b8",
+    bgColor: "bg-slate-50 dark:bg-slate-900/40",
+    textColor: "text-slate-700 dark:text-slate-300",
+    borderColor: "border-slate-200 dark:border-slate-700",
+  },
+} as const;
+
+// Insights Tab Content Component
+const InsightsTabContentSync = ({ onSwitchTab }: { onSwitchTab: (tab: "email" | "today" | "calendar" | "insights") => void }) => {
+  const t = useTranslation();
+  const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState<{
+    leadFunnel: Record<string, number>;
+    hotLeadCount: number;
+    warmLeadCount: number;
+    pendingFollowUps: number;
+    avgFollowUpDelayDays?: number;
+    upcomingMeetings: number;
+    importantThisWeek: number;
+    paymentsThisWeek: number;
+    missedNeedsReply: number;
+    revenue?: {
+      pipelineValueByStage: Record<string, number>;
+      totalOpenPipelineValue: number;
+      totalWonRevenueLast30Days: number;
+      totalWonRevenueAllTime: number;
+    };
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const STAGE_LABELS: Record<string, string> = {
+    new: "New",
+    cold: "Cold",
+    qualified: "Qualified",
+    warm: "Warm",
+    negotiating: "Negotiating",
+    ready_to_close: "Ready to Close",
+    won: "Won",
+    lost: "Lost",
+  };
+
+  useEffect(() => {
+    const loadInsights = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+        if (!session?.access_token) {
+          setLoading(false);
+          return;
+        }
+
+        const res = await fetch("/api/insights/overview", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to load insights");
+        }
+
+        const data = await res.json();
+        setInsights(data.data);
+      } catch (err: any) {
+        console.error("Error loading insights:", err);
+        setError(err.message || "Failed to load insights");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInsights();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+        <span className="ml-2 text-sm text-slate-500">Loading insights...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-3xl border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20 p-6 text-center">
+        <AlertCircle className="mx-auto h-6 w-6 text-red-600 dark:text-red-400" />
+        <p className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!insights) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-sm text-slate-500 dark:text-slate-400">No insights available</p>
+      </div>
+    );
+  }
+
+  const totalLeads = Object.values(insights.leadFunnel).reduce((a, b) => a + b, 0);
+  const openPipelineValue = insights.revenue?.totalOpenPipelineValue || 0;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{t("syncDataTabTitle")}</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          {t("syncDataTabDescription")}
+        </p>
+      </div>
+
+      {/* Today's Snapshot */}
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex-shrink-0 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataHotLeads")}</div>
+          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.hotLeadCount}</div>
+        </div>
+        <div className="flex-shrink-0 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataPendingFollowUps")}</div>
+          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.pendingFollowUps}</div>
+        </div>
+        <div className="flex-shrink-0 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataNext7DaysMeetings")}</div>
+          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.upcomingMeetings}</div>
+        </div>
+        {insights.revenue && (
+          <div className="flex-shrink-0 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataOpenPipelineValue")}</div>
+            <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              ${openPipelineValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Leads & Revenue Section */}
+      <div className="space-y-6">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("syncDataSectionLeadsRevenue")}</h3>
+        
+        {/* Lead Funnel - Full Width */}
+        <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataLeadFunnel")}</h4>
+            </div>
+          </div>
+          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+            {t("syncDataAgentTagSyncCRM")}
+          </span>
+          {totalLeads === 0 ? (
+            <div className="mt-4 space-y-1">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t("syncDataEmptyLeadFunnelTitle")}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataEmptyLeadFunnelDescription")}</p>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {Object.entries(insights.leadFunnel).map(([stage, count]) => (
+                <div key={stage} className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{STAGE_LABELS[stage] || stage}</span>
+                  <span className="text-base font-semibold text-slate-900 dark:text-slate-100">{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* High-Value Leads & Follow-ups - Side by Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* High-Value Leads */}
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataHighValueLeads")}</h4>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-semibold text-orange-600 dark:text-orange-400">{insights.hotLeadCount}</div>
+                <div className="text-lg font-semibold text-amber-600 dark:text-amber-400">{insights.warmLeadCount}</div>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              {t("syncDataAgentTagSync")}
+            </span>
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t("syncDataHighValueLeadsSubtitle")}</p>
+            {(insights.hotLeadCount > 0 || insights.warmLeadCount > 0) && (
+              <button
+                onClick={() => onSwitchTab("email")}
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                View hot leads <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Follow-ups */}
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataFollowUps")}</h4>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{insights.pendingFollowUps}</div>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              {t("syncDataAgentTagSync")}
+            </span>
+            {insights.pendingFollowUps === 0 ? (
+              <div className="mt-4 space-y-1">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t("syncDataEmptyFollowUpsTitle")}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataEmptyFollowUpsDescription")}</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t("syncDataFollowUpsSubtitle")}</p>
+            )}
+            {insights.pendingFollowUps > 0 && (
+              <button
+                onClick={() => onSwitchTab("email")}
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                Go to Follow-ups <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Revenue & Pipeline - Full Width */}
+        {insights.revenue && (
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataRevenuePipeline")}</h4>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              {t("syncDataAgentTagSyncInsight")}
+            </span>
+            {openPipelineValue === 0 && Object.values(insights.revenue.pipelineValueByStage).every(v => v === 0) ? (
+              <div className="mt-4 space-y-1">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t("syncDataEmptyPipelineTitle")}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t("syncDataEmptyPipelineDescription")}</p>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Open Pipeline</div>
+                    <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      ${insights.revenue.totalOpenPipelineValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Won (Last 30 days)</div>
+                    <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      ${insights.revenue.totalWonRevenueLast30Days.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Won (All Time)</div>
+                    <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      ${insights.revenue.totalWonRevenueAllTime.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                  <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Pipeline by Stage</div>
+                  <div className="space-y-2">
+                    {Object.entries(insights.revenue.pipelineValueByStage).map(([stage, value]) => (
+                      value > 0 && (
+                        <div key={stage} className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600 dark:text-slate-400">{STAGE_LABELS[stage] || stage}</span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            ${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Workload & Operations Section */}
+      <div className="space-y-6">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("syncDataSectionWorkloadOperations")}</h3>
+
+        {/* Upcoming Meetings & Email Workload - Side by Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Upcoming Meetings */}
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataUpcomingMeetings")}</h4>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{insights.upcomingMeetings}</div>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              {t("syncDataAgentTagSyncAloha")}
+            </span>
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Meetings in next 7 days</p>
+            {insights.upcomingMeetings > 0 && (
+              <button
+                onClick={() => onSwitchTab("calendar")}
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                Open calendar <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Email Workload */}
+          <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t("syncDataEmailWorkload")}</h4>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.importantThisWeek}</div>
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.paymentsThisWeek}</div>
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{insights.missedNeedsReply}</div>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              {t("syncDataAgentTagSync")}
+            </span>
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t("syncDataEmailWorkloadSubtitle")}</p>
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                <span className="text-xs text-slate-600 dark:text-slate-400">Important</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs text-slate-600 dark:text-slate-400">Payments / Bills</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-orange-500" />
+                <span className="text-xs text-slate-600 dark:text-slate-400">Missed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// CRM Micro-Panel Component
+const CRMMicroPanel = ({ 
+  lead, 
+  selectedEmail, 
+  setEmailQueueItems 
+}: { 
+  lead: any; 
+  selectedEmail: any; 
+  setEmailQueueItems: (updater: any) => void;
+}) => {
+  const leadId = lead.id || (selectedEmail as any).leadId;
+  const leadScore = lead.score || 0;
+  const [leadStage, setLeadStageLocal] = useState(lead.stage || "new");
+  const [updatingStage, setUpdatingStage] = useState(false);
+  const [notes, setNotes] = useState<Array<{ id: string; body: string; created_at: string }>>([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [newNote, setNewNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  
+  const stageLabels: Record<string, string> = {
+    new: "New",
+    cold: "Cold",
+    qualified: "Qualified",
+    warm: "Warm",
+    negotiating: "Negotiating",
+    ready_to_close: "Ready to Close",
+    won: "Won",
+    lost: "Lost",
+  };
+  
+  let stageColor = "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
+  if (leadScore >= 80) {
+    stageColor = "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300";
+  } else if (leadScore >= 60) {
+    stageColor = "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300";
+  }
+
+  const loadNotes = async () => {
+    if (!leadId || loadingNotes) return;
+    try {
+      setLoadingNotes(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch(`/api/sync/lead/${leadId}/notes`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setNotes(data.notes || []);
+      }
+    } catch (error) {
+      console.error("Error loading notes:", error);
+    } finally {
+      setLoadingNotes(false);
+    }
+  };
+
+  const updateLeadStage = async (newStage: string) => {
+    if (!leadId || updatingStage) return;
+    try {
+      setUpdatingStage(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch(`/api/sync/lead/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ lead_stage: newStage }),
+      });
+
+      if (res.ok) {
+        setLeadStageLocal(newStage);
+        setEmailQueueItems((prev: any[]) =>
+          prev.map((e) =>
+            e.id === selectedEmail.id && (e as any).lead
+              ? {
+                  ...e,
+                  lead: { ...(e as any).lead, stage: newStage },
+                }
+              : e
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error updating lead stage:", error);
+      alert("Failed to update lead stage");
+    } finally {
+      setUpdatingStage(false);
+    }
+  };
+
+  const saveNote = async () => {
+    if (!leadId || !newNote.trim() || savingNote) return;
+    try {
+      setSavingNote(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch(`/api/sync/lead/${leadId}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ body: newNote }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setNotes([data.note, ...notes]);
+        setNewNote("");
+      }
+    } catch (error) {
+      console.error("Error saving note:", error);
+      alert("Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+  
+  return (
+    <div className="mt-2 mb-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2.5 text-xs space-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-slate-600 dark:text-slate-400">Lead:</span>
+          <span className={`rounded-full px-2 py-0.5 font-semibold ${stageColor}`}>
+            {stageLabels[leadStage] || leadStage} ({leadScore})
+          </span>
+          {leadId && (
+            <select
+              value={leadStage}
+              onChange={(e) => updateLeadStage(e.target.value)}
+              disabled={updatingStage}
+              className="ml-1 px-1.5 py-0.5 text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 disabled:opacity-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {Object.entries(stageLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {lead.budget && (
+          <div>
+            <span className="text-slate-500 dark:text-slate-400">Budget:</span>{" "}
+            <span className="text-slate-700 dark:text-slate-300">{lead.budget}</span>
+          </div>
+        )}
+        {lead.timeline && (
+          <div>
+            <span className="text-slate-500 dark:text-slate-400">Timeline:</span>{" "}
+            <span className="text-slate-700 dark:text-slate-300">{lead.timeline}</span>
+          </div>
+        )}
+      </div>
+      
+      {leadId && (
+        <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2">
+          <button
+            onClick={() => {
+              setShowNotes(!showNotes);
+              if (!showNotes && notes.length === 0) {
+                loadNotes();
+              }
+            }}
+            className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          >
+            {showNotes ? "Hide" : "Show"} Notes ({notes.length})
+          </button>
+          
+          {showNotes && (
+            <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
+              {loadingNotes ? (
+                <Loader2 className="h-3 w-3 animate-spin text-slate-500" />
+              ) : (
+                <>
+                  {notes.map((note) => (
+                    <div key={note.id} className="text-xs text-slate-600 dark:text-slate-400 p-1.5 bg-white dark:bg-slate-900 rounded">
+                      {note.body}
+                      <span className="ml-2 text-slate-400 text-[10px]">
+                        {new Date(note.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex gap-1">
+                    <textarea
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="Add a note..."
+                      className="flex-1 px-2 py-1 text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 resize-none"
+                      rows={2}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                      onClick={saveNote}
+                      disabled={!newNote.trim() || savingNote}
+                      className="px-2 py-1 text-xs bg-slate-900 text-white rounded hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                    >
+                      {savingNote ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const SyncPage = () => {
-  const [activeTab, setActiveTab] = useState<"email" | "calendar">("email");
+  const [activeTab, setActiveTab] = useState<"email" | "today" | "calendar" | "insights">("email");
   const { alertCategories: defaultAlertCategories, isAuthenticated, openAuthModal, language } = useAppState();
   const t = useTranslation();
   
@@ -167,17 +807,37 @@ const SyncPage = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | GmailEmail | EmailQueueItem | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { role: "agent", text: "Tell me how you'd like to change or edit the draft." },
-  ]);
+  const [showCopilotPanel, setShowCopilotPanel] = useState(false);
+  const [copilotMode, setCopilotMode] = useState<"summary" | "next_step" | "proposal_hint" | "risk_analysis" | null>(null);
+  const [copilotInsights, setCopilotInsights] = useState<any>(null);
+  const [loadingCopilot, setLoadingCopilot] = useState(false);
+  // Per-email chat history caching
+  const [chatHistoryByEmailId, setChatHistoryByEmailId] = useState<Record<string, ChatMessage[]>>({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [emailDisplayLimit, setEmailDisplayLimit] = useState(5); // Show 5 emails initially
-  const [isEmailBoxExpanded, setIsEmailBoxExpanded] = useState(false);
-  const [emailBoxHeight, setEmailBoxHeight] = useState<number | null>(null); // Custom height from drag
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartY, setDragStartY] = useState(0);
-  const [dragStartHeight, setDragStartHeight] = useState(0);
-  const [isCategorizing, setIsCategorizing] = useState(false);
+  const [processingLabel, setProcessingLabel] = useState<string>("Sync is thinking...");
+
+  // Get chat messages for current email
+  const chatMessages = selectedEmail 
+    ? (chatHistoryByEmailId[selectedEmail.id] || [
+        { role: "agent", text: "Hi, I'm Sync. I can summarize this thread, help you understand what the customer wants, give you suggestions on how to respond, or rewrite the draft for you. What would you like to do?" }
+      ])
+    : [];
+
+  // Helper to update chat messages for current email
+  const setChatMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    if (!selectedEmail) return;
+    setChatHistoryByEmailId((prev) => {
+      const current = prev[selectedEmail.id] || [];
+      const updated = typeof updater === 'function' ? updater(current) : updater;
+      return {
+        ...prev,
+        [selectedEmail.id]: updated,
+      };
+    });
+  }, [selectedEmail]);
+  // Removed drag handle state - using fixed scrollable layout now
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
   const [draftError, setDraftError] = useState<Record<string, string>>({});
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -908,7 +1568,69 @@ const SyncPage = () => {
     }
   };
 
-  const loadGmailEmails = async () => {
+  // Automatic categorization - runs when emails are loaded
+  const categorizeEmailsAutomatically = useCallback(async (emailIds: string[]) => {
+    if (!isAuthenticated || emailIds.length === 0) return;
+    
+    try {
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      // Call categorize API silently in background
+      const res = await fetch("/api/sync/email/categorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ ids: emailIds }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Update local state with new categories
+        if (data.items && data.items.length > 0) {
+          const categoryMap = new Map(data.items.map((item: { id: string; category: string }) => [item.id, item.category]));
+          
+          // Update emailQueueItems
+          setEmailQueueItems((prev) =>
+            prev.map((item) => {
+              const newCategory = categoryMap.get(item.id);
+              if (newCategory) {
+                return { ...item, category: newCategory };
+              }
+              return item;
+            })
+          );
+
+          // Update gmailEmails
+          setGmailEmails((prev) =>
+            prev.map((email) => {
+              const newCategory = categoryMap.get(email.id);
+              if (newCategory) {
+                return { ...email, categoryId: newCategory };
+              }
+              return email;
+            })
+          );
+
+          // Update selected email if it was categorized
+          if (selectedEmail && "id" in selectedEmail) {
+            const newCategory = categoryMap.get(selectedEmail.id);
+            if (newCategory) {
+              setSelectedEmail({ ...selectedEmail, category: newCategory, categoryId: newCategory });
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      // Silently fail - categorization is not critical
+      console.error("Error auto-categorizing emails:", error);
+    }
+  }, [isAuthenticated, selectedEmail]);
+
+  const loadGmailEmails = useCallback(async () => {
     try {
       if (!isAuthenticated) return;
       
@@ -920,7 +1642,18 @@ const SyncPage = () => {
       }
 
       // Fetch from email queue API - show all non-deleted emails (not just "open" status)
-      const res = await fetch("/api/email-queue?includeDeleted=false&inboxOnly=false", {
+      // Include category filter if active
+      // Always include counts to get follow-ups count
+      let url = `/api/email-queue?includeDeleted=false&inboxOnly=false&includeCounts=true`;
+      if (activeCategory === "followups") {
+        url += `&filter=followups&sort=priority`;
+      } else if (activeCategory) {
+        url += `&category=${activeCategory}`;
+      } else {
+        url += `&sort=priority`; // Default to priority sort
+      }
+      
+      const res = await fetch(url, {
         headers: { 
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -936,8 +1669,20 @@ const SyncPage = () => {
       const data = await res.json();
       if (data.emails) {
         setEmailQueueItems(data.emails);
+        
+        // Update follow-up count from API metadata if available, otherwise calculate from emails
+        if (data.meta?.followupsCount !== undefined) {
+          setFollowUpCount(data.meta.followupsCount);
+        } else if (isFollowUpSuggestionsEnabled()) {
+          // Fallback: count from current email set (only accurate when viewing all emails)
+          if (activeCategory === null || activeCategory === "followups") {
+            const followUps = data.emails.filter((e: any) => e.hasFollowUpSuggestion || e.hasUrgentTasks || e.hasUrgentReminders);
+            setFollowUpCount(followUps.length);
+          }
+        }
+        
         // Also set gmailEmails for backward compatibility with existing UI
-        const formattedEmails: GmailEmail[] = data.emails.map((item: EmailQueueItem) => ({
+        const formattedEmails: GmailEmail[] = data.emails.map((item: EmailQueueItem & { lead?: any; hasFollowUpSuggestion?: boolean; priority_score?: number; hasPreparedDraft?: boolean; preparedDraft?: any }) => ({
           id: item.id,
           sender: item.from_name || item.from_address,
           fromAddress: item.from_address,
@@ -946,13 +1691,26 @@ const SyncPage = () => {
           body: item.body_html || item.body_text || undefined,
           timestamp: new Date(item.internal_date).toISOString(),
           categoryId: item.category || undefined,
-          draft: item.ai_draft || undefined,
+          draft: item.hasPreparedDraft && item.preparedDraft ? item.preparedDraft.draftBody : (item.ai_draft || undefined),
           status: item.queue_status === "done" ? "archived" : item.queue_status === "open" ? "needs_reply" : "drafted",
+          lead: item.lead,
+          hasFollowUpSuggestion: item.hasFollowUpSuggestion,
+          priorityScore: item.priority_score,
+          hasPreparedDraft: item.hasPreparedDraft,
+          preparedDraftId: item.preparedDraft?.id,
         }));
         setGmailEmails(formattedEmails);
         
         if (data.emails.length > 0 && !selectedEmail) {
           setSelectedEmail(data.emails[0]);
+        }
+        
+        // Automatically categorize uncategorized emails in background
+        const uncategorizedIds = data.emails
+          .filter((e: EmailQueueItem) => !e.category)
+          .map((e: EmailQueueItem) => e.id);
+        if (uncategorizedIds.length > 0) {
+          categorizeEmailsAutomatically(uncategorizedIds);
         }
       }
     } catch (error) {
@@ -960,7 +1718,7 @@ const SyncPage = () => {
     } finally {
       setIsLoadingEmails(false);
     }
-  };
+  }, [activeCategory, isAuthenticated, selectedEmail, categorizeEmailsAutomatically]);
 
   const triggerSync = async () => {
     try {
@@ -1003,86 +1761,6 @@ const SyncPage = () => {
     }
   };
 
-  const handleCategorize = async () => {
-    try {
-      if (!isAuthenticated || isCategorizing) return;
-      
-      setIsCategorizing(true);
-      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-      if (!session?.access_token) {
-        setIsCategorizing(false);
-        return;
-      }
-
-      // Collect all currently loaded email IDs
-      const emailIds = emailQueueItems.map((item) => item.id);
-      
-      if (emailIds.length === 0) {
-        setIsCategorizing(false);
-        return;
-      }
-
-      // Call categorize API
-      const res = await fetch("/api/sync/email/categorize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ ids: emailIds }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to categorize emails");
-      }
-
-      const data = await res.json();
-      
-      // Update local state with new categories
-      if (data.items && data.items.length > 0) {
-        const categoryMap = new Map(data.items.map((item: { id: string; category: string }) => [item.id, item.category]));
-        
-        // Update emailQueueItems
-        setEmailQueueItems((prev) =>
-          prev.map((item) => {
-            const newCategory = categoryMap.get(item.id);
-            if (newCategory) {
-              return { ...item, category: newCategory };
-            }
-            return item;
-          })
-        );
-
-        // Update gmailEmails
-        setGmailEmails((prev) =>
-          prev.map((email) => {
-            const newCategory = categoryMap.get(email.id);
-            if (newCategory) {
-              return { ...email, categoryId: newCategory };
-            }
-            return email;
-          })
-        );
-
-        // Update selected email if it was categorized
-        if (selectedEmail && "id" in selectedEmail) {
-          const newCategory = categoryMap.get(selectedEmail.id);
-          if (newCategory) {
-            setSelectedEmail({ ...selectedEmail, category: newCategory, categoryId: newCategory });
-          }
-        }
-      }
-
-      // Reload emails to get fresh data
-      await loadGmailEmails();
-    } catch (error: any) {
-      console.error("Error categorizing emails:", error);
-      alert(`Failed to categorize emails: ${error.message || "Unknown error"}`);
-    } finally {
-      setIsCategorizing(false);
-    }
-  };
 
   const handleRefresh = async () => {
     try {
@@ -1200,6 +1878,7 @@ const SyncPage = () => {
         status: email.status || "needs_reply",
         snippet: email.snippet,
         draft: email.draft || "",
+        body: email.body || undefined, // Preserve body content for HTML rendering
       }));
     }
     
@@ -1209,27 +1888,54 @@ const SyncPage = () => {
   }, [gmailEmails, isAuthenticated, shouldUseDemoMode]);
 
   const filteredEmails = useMemo(() => {
-    if (!activeCategory) return displayEmails;
-    // Filter: match category, or if "other" is selected, include null categories
-    return displayEmails.filter((email) => {
-      if (activeCategory === "other") {
-        return !email.categoryId || email.categoryId === "other";
-      }
-      return email.categoryId === activeCategory;
-    });
-  }, [activeCategory, displayEmails]);
+    let filtered = displayEmails;
+    
+    // Apply category filter
+    if (activeCategory) {
+      filtered = filtered.filter((email) => {
+        if (activeCategory === "other") {
+          return !email.categoryId || email.categoryId === "other";
+        }
+        return email.categoryId === activeCategory;
+      });
+    }
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((email) => {
+        // Search in sender name/address
+        const senderMatch = email.sender?.toLowerCase().includes(query) || 
+                           email.fromAddress?.toLowerCase().includes(query);
+        
+        // Search in subject
+        const subjectMatch = email.subject?.toLowerCase().includes(query);
+        
+        // Search in snippet
+        const snippetMatch = email.snippet?.toLowerCase().includes(query);
+        
+        return senderMatch || subjectMatch || snippetMatch;
+      });
+    }
+    
+    return filtered;
+  }, [activeCategory, displayEmails, searchQuery]);
+
+  // State for follow-up count
+  const [followUpCount, setFollowUpCount] = useState<number>(0);
 
   // Update alert categories with real counts based on actual email data
   const alertCategories = useMemo(() => {
-    // Define the 7 fixed categories
+    // Define the 8 fixed categories using the config (including Follow-ups)
     const categoryDefinitions = [
-      { id: "important", name: "Important", color: "#ef4444", defaultColor: "#ef4444" },
-      { id: "missed_unread", name: "Missed / Unread", color: "#fb923c", defaultColor: "#fb923c" },
-      { id: "payment_bill", name: "Payments / Bills", color: "#22c55e", defaultColor: "#22c55e" },
-      { id: "invoice", name: "Invoices", color: "#a855f7", defaultColor: "#a855f7" },
-      { id: "marketing", name: "Marketing", color: "#3b82f6", defaultColor: "#3b82f6" },
-      { id: "updates", name: "Updates", color: "#06b6d4", defaultColor: "#06b6d4" },
-      { id: "other", name: "Other", color: "#94a3b8", defaultColor: "#94a3b8" },
+      { id: "important", name: "Important", ...CATEGORY_CONFIG.important },
+      { id: "missed_unread", name: "Missed / Unread", ...CATEGORY_CONFIG.missed_unread },
+      { id: "followups", name: "Follow-ups", ...CATEGORY_CONFIG.followups },
+      { id: "payment_bill", name: "Payments / Bills", ...CATEGORY_CONFIG.payment_bill },
+      { id: "invoice", name: "Invoices", ...CATEGORY_CONFIG.invoice },
+      { id: "marketing", name: "Marketing", ...CATEGORY_CONFIG.marketing },
+      { id: "updates", name: "Updates", ...CATEGORY_CONFIG.updates },
+      { id: "other", name: "Other", ...CATEGORY_CONFIG.other },
     ];
 
     // Count emails by category
@@ -1250,37 +1956,7 @@ const SyncPage = () => {
     }));
   }, [displayEmails]);
 
-  // Handle drag for email box resize
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const deltaY = e.clientY - dragStartY; // Inverted: dragging up decreases height, dragging down increases height
-      const newHeight = Math.max(100, Math.min(800, dragStartHeight + deltaY)); // Min 100px, max 800px
-      setEmailBoxHeight(newHeight);
-      
-      // Auto-expand if dragged beyond initial limit
-      if (newHeight > 5 * 100 && !isEmailBoxExpanded) {
-        setIsEmailBoxExpanded(true);
-        setEmailDisplayLimit(filteredEmails.length);
-      } else if (newHeight <= 5 * 100 && isEmailBoxExpanded) {
-        setIsEmailBoxExpanded(false);
-        setEmailDisplayLimit(5);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragStartY, dragStartHeight, isEmailBoxExpanded, filteredEmails.length]);
+  // Drag handle removed - using fixed scrollable layout
 
   const categoryMap = Object.fromEntries(alertCategories.map((cat) => [cat.id, cat]));
 
@@ -1300,38 +1976,52 @@ const SyncPage = () => {
     if (!input.value.trim() || !selectedEmail) return;
 
     const userMessage = input.value.trim();
+
     setChatMessages((prev) => [...prev, { role: "user", text: userMessage }]);
     input.value = "";
     setIsProcessing(true);
 
+    // Determine processing label based on user message
+    const lowerMessage = userMessage.toLowerCase();
+    if (lowerMessage.includes("summarize") || lowerMessage.includes("summary")) {
+      setProcessingLabel("Sync is summarizing this thread...");
+    } else if (lowerMessage.includes("rewrite") || lowerMessage.includes("shorter") || lowerMessage.includes("change the draft") || lowerMessage.includes("edit the draft") || lowerMessage.includes("update the draft")) {
+      setProcessingLabel("Sync is rewriting your draft...");
+    } else {
+      setProcessingLabel("Sync is reviewing this conversation...");
+    }
+
     try {
       const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-      const accessToken = session?.access_token || (process.env.NODE_ENV !== "production" ? "dev-token" : null);
+      if (!session?.access_token) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: "agent", text: "Please log in to use this feature." },
+        ]);
+        setIsProcessing(false);
+        return;
+      }
 
-      const res = await fetch("/api/brain", {
+      // Get current draft body
+      const currentDraft = getEmailDraft(selectedEmail) || null;
+
+      // Call the conversational chat endpoint
+      const res = await fetch(`/api/sync/email/${selectedEmail.id}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          agent: "sync",
           message: userMessage,
-          taskType: "reply_draft",
-          language: getLanguageFromLocale(language),
-          emailContext: {
-            emailId: selectedEmail.id,
-            subject: getEmailSubject(selectedEmail),
-            fromAddress: getEmailSender(selectedEmail),
-          },
+          draftBody: currentDraft,
         }),
       });
 
       const json = await res.json();
-      const isOk = res.ok && !json.error;
 
-      if (!isOk) {
-        console.error("Sync API error:", json);
+      if (!res.ok) {
+        console.error("Chat API error:", json);
         setChatMessages((prev) => [
           ...prev,
           { role: "agent", text: `Sorry, I encountered an error: ${json.error || "Unknown error"}` },
@@ -1340,37 +2030,93 @@ const SyncPage = () => {
         return;
       }
 
-      const aiResponse = json.reply || "I've processed your request.";
-      const currentDraft = getEmailDraft(selectedEmail);
-      const updatedDraft = currentDraft 
-        ? `${currentDraft}\n\n[Updated: ${aiResponse}]`
-        : aiResponse;
+      // Handle different response types
+      const responseType = json.type || "answer";
+      const message = json.message || "I've processed your request.";
 
-      if (selectedEmail) {
-        // Update draft - handle different email types
-        if ("draft" in selectedEmail) {
-          setSelectedEmail({ ...selectedEmail, draft: updatedDraft } as any);
-        }
+      // Handle draft_update: update the draft state
+      if (responseType === "draft_update" && json.draftBody && selectedEmail) {
+        // Update email queue items
+        setEmailQueueItems((prev) =>
+          prev.map((e) =>
+            e.id === selectedEmail.id
+              ? { ...e, ai_draft: json.draftBody, ai_draft_generated_at: new Date().toISOString() }
+              : e
+          )
+        );
+        
+        // Update Gmail emails if applicable
+        setGmailEmails((prev) =>
+          prev.map((e) =>
+            e.id === selectedEmail.id ? { ...e, draft: json.draftBody, ai_draft: json.draftBody } : e
+          )
+        );
+        
+        // Update selected email
+        setSelectedEmail({
+          ...selectedEmail,
+          ai_draft: json.draftBody,
+          ai_draft_generated_at: new Date().toISOString(),
+        });
+
+        // Show a brief visual indicator (optional - could add toast here)
+        // For now, the message itself will indicate the draft was updated
       }
 
+      // Add response to chat (for all types: answer, draft_update, clarification)
       setChatMessages((prev) => [
         ...prev,
-        { role: "agent", text: aiResponse },
+        { role: "agent", text: message },
       ]);
+
+      // Scroll chat to bottom (using setTimeout to ensure DOM update)
+      setTimeout(() => {
+        const chatContainer = document.querySelector('[data-chat-container]');
+        if (chatContainer) {
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+      }, 100);
     } catch (err) {
-      console.error("Error calling Sync API:", err);
+      console.error("Error calling Sync Chat API:", err);
       setChatMessages((prev) => [
         ...prev,
         { role: "agent", text: "Sorry, I encountered an error. Please try again." },
       ]);
     } finally {
       setIsProcessing(false);
+      setProcessingLabel("Sync is thinking...");
     }
   };
 
   const handleEmailSelect = async (email: EmailRecord | GmailEmail | EmailQueueItem) => {
-    setSelectedEmail(email);
-    setChatMessages([{ role: "agent", text: t("syncTellSyncToChange") }]);
+    // Look up the full email from emailQueueItems or gmailEmails to preserve body content
+    const fullEmail = emailQueueItems.find(e => e.id === email.id) 
+      || gmailEmails.find(e => e.id === email.id)
+      || email;
+    
+    // Merge the selected email with full email data to ensure body content is preserved
+    const emailWithBody = {
+      ...email,
+      ...(fullEmail && {
+        body: "body" in fullEmail ? fullEmail.body : undefined,
+        body_html: "body_html" in fullEmail ? fullEmail.body_html : undefined,
+        body_text: "body_text" in fullEmail ? fullEmail.body_text : undefined,
+      }),
+    };
+    
+    setSelectedEmail(emailWithBody);
+    // Initialize chat history for this email if it doesn't exist
+    setChatHistoryByEmailId((prev) => {
+      if (!prev[email.id]) {
+        return {
+          ...prev,
+          [email.id]: [
+            { role: "agent", text: "Hi, I'm Sync. I can summarize this thread, help you understand what the customer wants, give you suggestions on how to respond, or rewrite the draft for you. What would you like to do?" }
+          ],
+        };
+      }
+      return prev;
+    });
     
     // Fetch draft if email doesn't have one
     if (!("ai_draft" in email) || !email.ai_draft) {
@@ -1430,6 +2176,15 @@ const SyncPage = () => {
 
   const getEmailDraft = (email: EmailRecord | GmailEmail | EmailQueueItem | null): string => {
     if (!email) return "";
+    
+    // Check for prepared draft first (from API response)
+    const emailWithDraft = email as any;
+    if (emailWithDraft?.preparedDraft?.draftBody) {
+      return emailWithDraft.preparedDraft.draftBody;
+    }
+    if (emailWithDraft?.hasPreparedDraft && emailWithDraft?.draft) {
+      return emailWithDraft.draft;
+    }
     
     // Check if email has ai_draft field (from API response)
     if ("ai_draft" in email && email.ai_draft) {
@@ -1874,206 +2629,246 @@ const SyncPage = () => {
 
       {/* Tab Bar */}
       <div className="border-b border-slate-200 dark:border-slate-700">
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("email")}
-            className={`px-4 py-2 text-sm font-semibold transition ${
-              activeTab === "email"
-                ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
-                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-            }`}
-          >
-            {t("syncEmailTab")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("calendar")}
-            className={`px-4 py-2 text-sm font-semibold transition ${
-              activeTab === "calendar"
-                ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
-                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-            }`}
-          >
-            {t("syncCalendarTab")}
-          </button>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("email")}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === "email"
+                  ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+              }`}
+            >
+              {t("syncEmailTab")}
+            </button>
+            {isTodayDashboardEnabled() && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("today")}
+                className={`px-4 py-2 text-sm font-semibold transition ${
+                  activeTab === "today"
+                    ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                }`}
+              >
+                Today
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveTab("calendar")}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === "calendar"
+                  ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+              }`}
+            >
+              {t("syncCalendarTab")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("insights")}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === "insights"
+                  ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+              }`}
+            >
+              Data
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {!isGmailConnected ? (
+              <button
+                onClick={handleConnectGmail}
+                disabled={isConnectingGmail}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 px-4 py-1.5 text-xs font-semibold transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isConnectingGmail ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {t("syncConnecting")}
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-3.5 w-3.5" />
+                    Connect your Gmail
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Connected to Gmail
+                </div>
+                <button
+                  onClick={triggerSync}
+                  disabled={isSyncing || isRefreshing}
+                  className="p-1.5 rounded-full border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  title="Refresh inbox"
+                  aria-label="Refresh inbox"
+                >
+                  {isSyncing || isRefreshing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Tab Content */}
       <div>
         {activeTab === "email" && (
-          <div className="space-y-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex-1" />
-              <div className="flex items-center gap-2">
-                {!isGmailConnected ? (
-                  <button
-                    onClick={handleConnectGmail}
-                    disabled={isConnectingGmail}
-                    className="flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isConnectingGmail ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {t("syncConnecting")}
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="h-4 w-4" />
-                        Connect your Gmail
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Connected to Gmail
+          <div className="flex flex-col h-[calc(100vh-12rem)] md:h-[calc(100vh-10rem)]">
+            {/* Top Bar: Connection Status & Stats */}
+            <div className="flex-shrink-0 space-y-4 mb-4">
+              {/* Sync Error Banner */}
+              {isGmailConnected && syncStatus?.syncStatus === "error" && syncStatus.syncError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-300">Sync Error</p>
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{syncStatus.syncError}</p>
+                      </div>
                     </div>
                     <button
                       onClick={triggerSync}
-                      disabled={isSyncing || isRefreshing}
-                      className="p-2 rounded-full border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                      title="Refresh inbox"
-                      aria-label="Refresh inbox"
+                      className="text-xs font-semibold text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                     >
-                      {isSyncing || isRefreshing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
+                      Retry
                     </button>
                   </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Sync Error Banner */}
-            {isGmailConnected && syncStatus?.syncStatus === "error" && syncStatus.syncError && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-red-800 dark:text-red-300">Sync Error</p>
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">{syncStatus.syncError}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={triggerSync}
-                    className="text-xs font-semibold text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    Retry
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            <section className="rounded-3xl border border-slate-200 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-900/40">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t("syncLatestInboxMetrics")}</p>
-                {!isPreview && loading && <span className="text-xs text-slate-500">Loading stats…</span>}
-                {!isPreview && error && <span className="text-xs text-red-500">Couldn&apos;t load stats</span>}
-                {!isPreview && noStats && <span className="text-xs text-slate-500">No stats yet</span>}
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  { label: t("syncImportantEmails"), value: latestStats.xi_important_emails },
-                  { label: t("syncPaymentsBills"), value: latestStats.xi_payments_bills },
-                  { label: t("syncInvoices"), value: latestStats.xi_invoices },
-                  { label: t("syncMissedEmails"), value: latestStats.xi_missed_emails },
-                ].map((metric) => (
-                  <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900/60 min-w-0">
-                    <p className="text-xs uppercase tracking-widest text-slate-500 break-words leading-tight">{metric.label}</p>
-                    <p className="mt-2 text-2xl">{metric.value}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Only show alert categories for verified users with real data */}
-            {!shouldUseDemoMode && syncStats && (
-              <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-                {/* All option */}
-                <button
-                  onClick={() => setActiveCategory(null)}
-                  className={`rounded-2xl p-3 text-left text-sm font-semibold shadow-sm transition ${
-                    activeCategory === null
-                      ? "bg-slate-900 text-white ring-2 ring-slate-700 dark:bg-white dark:text-slate-900 dark:ring-slate-300"
-                      : "bg-white/80 text-slate-700 border border-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:border-slate-700"
-                  }`}
-                >
-                  <p>All</p>
-                  <p className="text-xs opacity-80">
-                    {displayEmails.length} {displayEmails.length === 1 ? "email" : "emails"}
-                  </p>
-                </button>
-                {alertCategories
-                  .filter((category) => category.count > 0)
-                  .map((category) => (
+              {/* Category Filters */}
+              {!shouldUseDemoMode && (
+                <section className="rounded-2xl border border-slate-200 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {/* All option */}
                     <button
-                      key={category.id}
-                      onClick={() => setActiveCategory((prev) => (prev === category.id ? null : category.id))}
-                      style={{ backgroundColor: category.color }}
-                      className={`rounded-2xl p-3 text-left text-sm font-semibold text-white shadow-sm transition ${
-                        activeCategory === category.id ? "ring-2 ring-white/70" : "opacity-90"
+                      onClick={() => {
+                        setActiveCategory(null);
+                        loadGmailEmails();
+                      }}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition flex-shrink-0 ${
+                        activeCategory === null
+                          ? "bg-slate-900 text-white ring-2 ring-slate-700 dark:bg-white dark:text-slate-900 dark:ring-slate-300"
+                          : "bg-white/80 text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-slate-900/60 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
                       }`}
                     >
-                      <p>{getCategoryName(category.id)}</p>
-                      <p className="text-xs opacity-80">
-                        {category.count} {category.count === 1 ? t("alert") : t("alerts")}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <Mail size={12} className="flex-shrink-0" />
+                        <span>All</span>
+                        {activeCategory === null && (
+                          <span className="text-xs opacity-80 ml-1">
+                            ({displayEmails.length})
+                          </span>
+                        )}
+                      </div>
                     </button>
-                  ))}
-              </section>
-            )}
+                    {/* Category chips */}
+                    {getAllCategories().map((categoryId) => {
+                      const categoryConfig = getCategoryConfig(categoryId);
+                      const Icon = categoryConfig.icon;
+                      // Use followUpCount for followups category, otherwise use alertCategories count
+                      const count = categoryId === "followups" 
+                        ? followUpCount 
+                        : alertCategories.find((c) => c.id === categoryId)?.count || 0;
+                      const isActive = activeCategory === categoryId;
+                      
+                      return (
+                        <button
+                          key={categoryId}
+                          onClick={() => {
+                            setActiveCategory(isActive ? null : categoryId);
+                            loadGmailEmails();
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition flex items-center gap-1.5 flex-shrink-0 ${
+                            isActive
+                              ? `${categoryConfig.bgColor} ${categoryConfig.textColor} ring-2 ${categoryConfig.borderColor}`
+                              : `${categoryConfig.bgColor} ${categoryConfig.textColor} border ${categoryConfig.borderColor} hover:opacity-80`
+                          }`}
+                        >
+                          <Icon size={12} className="flex-shrink-0" />
+                          <span>{categoryConfig.label}</span>
+                          {count > 0 && (
+                            <span className={`text-xs px-1 py-0.5 rounded-full ${isActive ? categoryConfig.badgeBg : "bg-white/50 dark:bg-black/20"}`}>
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.5fr,1fr]">
-              <div className="rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">{t("syncEmailQueue")}</h2>
+            {/* Two-Pane Layout: Email Client Style */}
+            <div className="flex-1 flex gap-4 min-h-0">
+              {/* Left Pane: Email Queue */}
+              <aside className="flex flex-col w-[320px] md:w-[360px] flex-shrink-0 border-r border-slate-200 dark:border-slate-700 pr-4">
+                {/* Email Queue Header */}
+                <div className="flex-shrink-0 flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold">{t("syncEmailQueue")}</h2>
                   <div className="flex items-center gap-2">
                     {isGmailConnected && emailQueueItems.length > 0 && (
-                      <button
-                        onClick={handleCategorize}
-                        disabled={isCategorizing}
-                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isCategorizing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Categorizing...
-                          </>
+                      <div className="relative flex items-center">
+                        {isSearchExpanded ? (
+                          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1.5 shadow-sm">
+                            <Search className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="Search emails..."
+                              className="bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 min-w-[200px]"
+                              autoFocus
+                              onBlur={() => {
+                                // Keep expanded if there's a query
+                                if (!searchQuery.trim()) {
+                                  setIsSearchExpanded(false);
+                                }
+                              }}
+                            />
+                            {searchQuery && (
+                              <button
+                                onClick={() => {
+                                  setSearchQuery("");
+                                  setIsSearchExpanded(false);
+                                }}
+                                className="p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                                title="Clear search"
+                              >
+                                <X className="h-3.5 w-3.5 text-slate-500" />
+                              </button>
+                            )}
+                          </div>
                         ) : (
-                          <>
-                            <FileText className="h-4 w-4" />
-                            Categorize emails
-                          </>
+                          <button
+                            onClick={() => setIsSearchExpanded(true)}
+                            className="p-2 rounded-full border border-slate-200 bg-white/50 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition"
+                            title="Search emails"
+                          >
+                            <Search className="h-4 w-4" />
+                          </button>
                         )}
-                      </button>
+                      </div>
                     )}
-                    {activeCategory && (
-                      <button onClick={() => setActiveCategory(null)} className="text-xs uppercase tracking-wide text-brand-accent">
-                        {t("syncClearFilter")}
-                      </button>
-                    )}
-                    <button
-                      onClick={handleRefresh}
-                      disabled={isRefreshing || !isGmailConnected}
-                      className="p-2 hover:bg-white/5 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      aria-label="Refresh inbox"
-                      title="Refresh inbox"
-                    >
-                      {isRefreshing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="w-4 h-4" />
-                      )}
-                    </button>
                   </div>
                 </div>
-                <div className="mt-4">
+
+                {/* Email List - Scrollable */}
+                <div className="flex-1 min-h-0 overflow-hidden">
                   {isLoadingEmails ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
@@ -2081,178 +2876,399 @@ const SyncPage = () => {
                     </div>
                   ) : filteredEmails.length === 0 ? (
                     <div className="py-8 text-center">
-                      <p className="text-sm text-slate-500 mb-4">
+                      <p className="text-sm text-slate-500">
                         {isGmailConnected 
                           ? "Gmail is connected, but there are no emails to show yet." 
                           : t("syncConnectGmailToView")}
                       </p>
                     </div>
                   ) : (
-                    <>
-                      <div className="relative border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                        <div 
-                          className={`divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto ${
-                            isDragging ? "select-none" : ""
+                    <div className="h-full overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredEmails.map((email) => {
+                        const isSelected = selectedEmail?.id === email.id;
+                        return (
+                          <button
+                          key={email.id}
+                          onClick={() => handleEmailSelect(email)}
+                          className={`w-full px-3 py-3 text-left transition-all duration-200 ${
+                            isSelected 
+                              ? "bg-slate-100 dark:bg-slate-800/60 border-l-4 border-l-slate-900 dark:border-l-white" 
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:border-l-4 hover:border-l-slate-700 dark:hover:border-l-slate-400 border-l-4 border-l-transparent"
                           }`}
-                          style={{
-                            maxHeight: emailBoxHeight !== null 
-                              ? `${emailBoxHeight}px` 
-                              : isEmailBoxExpanded 
-                                ? 'none' 
-                                : `${5 * 100}px`,
-                            transition: isDragging ? 'none' : 'max-height 0.2s ease-out',
-                            paddingBottom: '16px', // Space for drag handle
-                          }}
                         >
-                          {filteredEmails.slice(0, isEmailBoxExpanded ? filteredEmails.length : emailDisplayLimit).map((email) => (
-                            <button
-                              key={email.id}
-                              onClick={() => handleEmailSelect(email)}
-                              className={`w-full py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                                selectedEmail?.id === email.id ? "bg-slate-100 dark:bg-slate-800/60" : ""
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold">{email.sender}</p>
-                                <span className="text-xs text-slate-500">{email.timestamp}</span>
-                              </div>
-                              <p className="text-sm text-slate-600 dark:text-slate-300">{email.subject}</p>
-                              <div className="mt-2 flex items-center space-x-2 text-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-sm font-semibold truncate flex-1">{email.sender}</p>
+                            <span className="text-xs text-slate-500 ml-2 flex-shrink-0">{email.timestamp}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 dark:text-slate-300 truncate mb-2">{email.subject}</p>
+                          <div className="flex items-center gap-2 text-xs">
+                            {(() => {
+                              const categoryId = (email.categoryId || "other") as EmailCategory;
+                              const categoryConfig = getCategoryConfig(categoryId);
+                              const Icon = categoryConfig.icon;
+                              return (
                                 <span
-                                  className="rounded-full px-2 py-1 text-white"
-                                  style={{ backgroundColor: categoryMap[email.categoryId || "other"]?.color || "#0f172a" }}
+                                  className={`rounded-full px-2 py-0.5 flex items-center gap-1 ${categoryConfig.badgeBg} ${categoryConfig.badgeText}`}
                                 >
-                                  {email.categoryId ? getCategoryName(email.categoryId) : "Other (uncategorized)"}
+                                  <Icon size={10} className="flex-shrink-0" />
+                                  <span className="truncate">{categoryConfig.label}</span>
                                 </span>
-                                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 dark:bg-slate-800">
-                                  {email.status.replace("_", " ")}
-                                </span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                        {/* Drag handle */}
-                        <div
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsDragging(true);
-                            setDragStartY(e.clientY);
-                            const scrollableDiv = e.currentTarget.previousElementSibling as HTMLElement;
-                            const currentHeight = emailBoxHeight !== null 
-                              ? emailBoxHeight 
-                              : isEmailBoxExpanded 
-                                ? scrollableDiv?.scrollHeight || 0
-                                : 5 * 100;
-                            setDragStartHeight(currentHeight);
-                          }}
-                          className={`absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center group z-10 ${
-                            isDragging ? "bg-slate-300 dark:bg-slate-600" : "hover:bg-slate-100 dark:hover:bg-slate-800 bg-slate-50 dark:bg-slate-900/50"
-                          } transition-colors`}
-                          style={{
-                            borderTop: '1px solid',
-                            borderColor: 'rgb(226 232 240 / 0.5)',
-                          }}
-                        >
-                          <div className="w-12 h-1 rounded-full bg-slate-400 dark:bg-slate-500 group-hover:bg-slate-500 dark:group-hover:bg-slate-400 transition-colors" />
-                        </div>
-                      </div>
-                    </>
+                              );
+                            })()}
+                            {(email as any).hasPreparedDraft && (
+                              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 text-xs font-semibold">
+                                Draft ready
+                              </span>
+                            )}
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500 dark:bg-slate-800 text-xs">
+                              {email.status.replace("_", " ")}
+                            </span>
+                          </div>
+                        </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
+              </aside>
 
-              <div className="rounded-3xl border border-slate-200 bg-white/80 p-5 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-                <h2 className="text-xl font-semibold">{t("syncDraftPreview")}</h2>
-                {selectedEmail ? (
-                  <div className="mt-4 space-y-4 text-slate-600 dark:text-slate-200">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">{t("syncOriginal")}</p>
-                      <p className="mt-1 rounded-2xl bg-slate-100/70 p-3 text-sm dark:bg-slate-800/60">
-                        {getEmailSnippet(selectedEmail) || "No preview available"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500">{t("syncDraft")}</p>
-                      {draftLoading[selectedEmail.id] ? (
-                        <div className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Generating draft...</span>
-                        </div>
-                      ) : draftError[selectedEmail.id] ? (
-                        <div className="mt-1 rounded-2xl bg-red-900/90 p-3 text-sm text-white dark:bg-red-800/50">
-                          <p className="mb-2">{draftError[selectedEmail.id]}</p>
-                          <button
-                            onClick={() => handleEmailSelect(selectedEmail)}
-                            className="text-xs underline hover:no-underline"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white whitespace-pre-wrap">
-                          {getEmailDraft(selectedEmail) || t("syncPlaceholderDraft")}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleAcceptDraft}
-                        disabled={!getEmailDraft(selectedEmail) || draftLoading[selectedEmail.id]}
-                        className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                      >
-                        {t("syncAcceptDraft")}
-                      </button>
-                      <button
-                        onClick={handleEditDraft}
-                        disabled={!getEmailDraft(selectedEmail) || draftLoading[selectedEmail.id]}
-                        className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {t("syncEditDraft")}
-                      </button>
-                    </div>
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t("syncChatWithSync")}</h3>
-                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
-                        {chatMessages.map((message, index) => (
-                          <div
-                            key={index}
-                            className={`rounded-2xl px-3 py-2 text-xs ${
-                              message.role === "agent"
-                                ? "bg-slate-900/90 text-white dark:bg-slate-800"
-                                : "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
-                            }`}
-                          >
-                            {message.text}
+              {/* Right Pane: Email Detail + Draft Composer */}
+              <section className="flex-1 flex flex-col min-w-0 min-h-0">
+                {/* Email Detail View (Top, Scrollable) */}
+                <div className="flex-1 overflow-y-auto border-b border-slate-200 dark:border-slate-700 pb-4">
+                  {selectedEmail ? (
+                    <div className="space-y-4">
+                      {/* Email Header */}
+                      <div className="border-b border-slate-200 dark:border-slate-700 pb-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h2 className="text-xl font-semibold">{getEmailSubject(selectedEmail) || "(No subject)"}</h2>
+                              {isAiCopilotEnabled() && (
+                                <button
+                                  onClick={() => setShowCopilotPanel(!showCopilotPanel)}
+                                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 transition"
+                                  title="Open Copilot"
+                                >
+                                  <Sparkles className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                                </button>
+                              )}
+                            </div>
+                            
+                            {/* CRM Micro-Panel */}
+                            {isLeadScoringEnabled() && (selectedEmail as any).lead && (
+                              <CRMMicroPanel 
+                                lead={(selectedEmail as any).lead}
+                                selectedEmail={selectedEmail}
+                                setEmailQueueItems={setEmailQueueItems}
+                              />
+                            )}
+                            
+                            <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
+                              <div>
+                                <span className="font-semibold">From:</span> {getEmailSender(selectedEmail)}
+                              </div>
+                              <div>
+                                <span className="font-semibold">Date:</span> {(() => {
+                                  if ("internal_date" in selectedEmail) {
+                                    return new Date(selectedEmail.internal_date).toLocaleString();
+                                  }
+                                  if ("timestamp" in selectedEmail) {
+                                    return new Date(selectedEmail.timestamp).toLocaleString();
+                                  }
+                                  return "Unknown";
+                                })()}
+                              </div>
+                              {/* Follow-up button */}
+                              {isFollowUpSuggestionsEnabled() && (selectedEmail as any).hasFollowUpSuggestion && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                                      if (!session?.access_token) return;
+                                      
+                                      const res = await fetch(`/api/sync/email/${selectedEmail.id}/follow-up-draft`, {
+                                        method: "POST",
+                                        headers: {
+                                          Authorization: `Bearer ${session.access_token}`,
+                                        },
+                                      });
+                                      
+                                      if (res.ok) {
+                                        const data = await res.json();
+                                        if (data.draft) {
+                                          // Insert draft into composer
+                                          const draft = getEmailDraft(selectedEmail);
+                                          if (!draft || draft === t("syncPlaceholderDraft")) {
+                                            // Update email with draft
+                                            setEmailQueueItems((prev) =>
+                                              prev.map((e) =>
+                                                e.id === selectedEmail.id
+                                                  ? { ...e, ai_draft: data.draft }
+                                                  : e
+                                              )
+                                            );
+                                            setGmailEmails((prev) =>
+                                              prev.map((e) =>
+                                                e.id === selectedEmail.id
+                                                  ? { ...e, draft: data.draft, ai_draft: data.draft }
+                                                  : e
+                                              )
+                                            );
+                                            setSelectedEmail({
+                                              ...selectedEmail,
+                                              ai_draft: data.draft,
+                                            } as any);
+                                          }
+                                        }
+                                      }
+                                    } catch (error) {
+                                      console.error("Error generating follow-up draft:", error);
+                                    }
+                                  }}
+                                  className="rounded-full bg-amber-100 dark:bg-amber-900/40 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 flex items-center gap-1.5"
+                                >
+                                  <Clock size={12} />
+                                  Follow-up suggested
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        ))}
-                        {isProcessing && (
-                          <div className="rounded-2xl bg-slate-900/90 px-3 py-2 text-xs text-white dark:bg-slate-800">
-                            {t("syncProcessing")}
-                          </div>
-                        )}
+                        </div>
                       </div>
-                      <form onSubmit={handleChat} className="mt-3 flex gap-2">
-                        <input
-                          name="message"
-                          placeholder={t("syncPlaceholderChat")}
-                          disabled={isProcessing}
-                          className="flex-1 rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-xs focus:border-brand-accent focus:outline-none disabled:opacity-50 dark:border-slate-700"
-                        />
-                        <button
-                          type="submit"
-                          disabled={isProcessing}
-                          className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-                        >
-                          {t("syncSend")}
-                        </button>
-                      </form>
+
+                      {/* Email Body */}
+                      {(() => {
+                        const bodyText = "body_text" in selectedEmail ? selectedEmail.body_text : null;
+                        const bodyHtml = "body_html" in selectedEmail ? selectedEmail.body_html : null;
+                        const body = "body" in selectedEmail ? selectedEmail.body : null;
+                        const snippet = getEmailSnippet(selectedEmail);
+                        
+                        // Helper to detect if content is HTML
+                        const isHtml = (content: string | null | undefined): boolean => {
+                          if (!content) return false;
+                          // Check if content contains HTML tags
+                          return /<[a-z][\s\S]*>/i.test(content);
+                        };
+                        
+                        const hasHtmlContent = bodyHtml || (body && isHtml(body));
+                        
+                        // Priority: body_html > body (if HTML) > body_text > body (if text) > snippet
+                        if (bodyHtml) {
+                          // HTML email - render without prose classes to preserve original email styling (like Gmail)
+                          return (
+                            <div 
+                              className="email-html-content"
+                              style={{
+                                maxWidth: '100%',
+                                overflow: 'auto',
+                              }}
+                              dangerouslySetInnerHTML={{ __html: bodyHtml }}
+                            />
+                          );
+                        } else if (body && isHtml(body)) {
+                          // body property contains HTML - render without prose classes
+                          return (
+                            <div 
+                              className="email-html-content"
+                              style={{
+                                maxWidth: '100%',
+                                overflow: 'auto',
+                              }}
+                              dangerouslySetInnerHTML={{ __html: body }}
+                            />
+                          );
+                        } else {
+                          // Plain text content - use prose for better typography
+                          return (
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                              {bodyText ? (
+                                <div className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                                  {bodyText}
+                                </div>
+                              ) : body ? (
+                                <div className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                                  {body}
+                                </div>
+                              ) : snippet ? (
+                                <div className="text-slate-700 dark:text-slate-200">
+                                  {snippet}
+                                </div>
+                              ) : (
+                                <p className="text-slate-500 italic">No email content available</p>
+                              )}
+                            </div>
+                          );
+                        }
+                      })()}
                     </div>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-slate-500">{t("syncSelectEmailToPreview")}</p>
-                )}
-              </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <Mail className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+                        <p className="text-slate-500 dark:text-slate-400">{t("syncSelectEmailToPreview")}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Draft Composer (Bottom, Fixed) */}
+                <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/40 p-4">
+                  {selectedEmail ? (
+                    <div className="space-y-4">
+                      {/* Draft Display */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">{t("syncDraft")}</p>
+                          <div className="flex items-center gap-2">
+                            {draftLoading[selectedEmail.id] && (
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+                            )}
+                            {getEmailDraft(selectedEmail) && !draftLoading[selectedEmail.id] && (
+                              <button
+                                onClick={() => {
+                                  const draft = getEmailDraft(selectedEmail);
+                                  if (draft) {
+                                    navigator.clipboard.writeText(draft);
+                                  }
+                                }}
+                                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+                                title="Copy draft"
+                              >
+                                Copy
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                           {draftLoading[selectedEmail.id] ? (
+                             <div className="rounded-lg bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white flex items-center gap-2">
+                               <Loader2 className="h-4 w-4 animate-spin" />
+                               <span>Generating draft...</span>
+                             </div>
+                           ) : draftError[selectedEmail.id] ? (
+                             <div className="rounded-lg bg-red-900/90 p-3 text-sm text-white dark:bg-red-800/50">
+                               <p className="mb-2">{draftError[selectedEmail.id]}</p>
+                               <button
+                                 onClick={() => handleEmailSelect(selectedEmail)}
+                                 className="text-xs underline hover:no-underline"
+                               >
+                                 Retry
+                               </button>
+                             </div>
+                           ) : (
+                             <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3 text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap min-h-[80px] max-h-[200px] overflow-y-auto">
+                               {(() => {
+                                 // Check for prepared draft first, then regular draft
+                                 const emailWithDraft = selectedEmail as any;
+                                 const preparedDraft = emailWithDraft?.preparedDraft?.draftBody || emailWithDraft?.hasPreparedDraft ? (emailWithDraft as any).draft : null;
+                                 const regularDraft = getEmailDraft(selectedEmail);
+                                 const draft = preparedDraft || regularDraft;
+                                 
+                                 if (preparedDraft) {
+                                   return (
+                                     <div>
+                                       <div className="mb-2 text-xs text-orange-600 dark:text-orange-400 font-semibold">
+                                         Prepared draft ready
+                                       </div>
+                                       <div>{draft}</div>
+                                     </div>
+                                   );
+                                 }
+                                 
+                                 return draft || <p className="text-slate-400 italic">{t("syncPlaceholderDraft")}</p>;
+                               })()}
+                             </div>
+                           )}
+                      </div>
+
+                         {/* Action Buttons */}
+                         <div className="flex gap-2">
+                           <button
+                             onClick={handleEditDraft}
+                             disabled={(!getEmailDraft(selectedEmail) && !(selectedEmail as any)?.preparedDraft?.draftBody) || draftLoading[selectedEmail.id]}
+                             className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                           >
+                             {t("syncEditDraft")}
+                           </button>
+                           <button
+                             onClick={async () => {
+                               // If there's a prepared draft, mark it as consumed after sending
+                               const emailWithDraft = selectedEmail as any;
+                               if (emailWithDraft?.preparedDraft?.id) {
+                                 try {
+                                   const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                                   if (session?.access_token) {
+                                     await fetch(`/api/sync/follow-ups/prepared/${emailWithDraft.preparedDraft.id}`, {
+                                       method: "PATCH",
+                                       headers: {
+                                         Authorization: `Bearer ${session.access_token}`,
+                                       },
+                                     });
+                                   }
+                                 } catch (error) {
+                                   console.error("Error marking draft as consumed:", error);
+                                 }
+                               }
+                               setShowSendModal(true);
+                             }}
+                             disabled={(!getEmailDraft(selectedEmail) && !(selectedEmail as any)?.preparedDraft?.draftBody) || draftLoading[selectedEmail.id]}
+                             className="flex-1 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                           >
+                             Send
+                           </button>
+                         </div>
+
+                      {/* Chat Interface - Compact */}
+                      <div className="rounded-lg border border-slate-200 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+                        <div className="mb-2">
+                          <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t("syncChatWithSync")}</h3>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Ask Sync about this email, the lead, or how to improve your reply. It can also update the draft for you.
+                          </p>
+                        </div>
+                        <div className="mb-2 space-y-1.5 max-h-32 overflow-y-auto" data-chat-container>
+                          {chatMessages.slice(-3).map((message, index) => (
+                            <div
+                              key={index}
+                              className={`rounded-lg px-2 py-1 text-xs ${
+                                message.role === "agent"
+                                  ? "bg-slate-900/90 text-white dark:bg-slate-800"
+                                  : "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
+                              }`}
+                            >
+                              {message.text}
+                            </div>
+                          ))}
+                          {isProcessing && (
+                            <div className="rounded-lg bg-slate-900/90 px-2 py-1 text-xs text-white dark:bg-slate-800">
+                              {processingLabel}
+                            </div>
+                          )}
+                        </div>
+                        <form onSubmit={handleChat} className="flex gap-2">
+                          <input
+                            name="message"
+                            placeholder={isProcessing ? "Sync is thinking..." : "Ask Sync a question or tell it how to change the draft…"}
+                            disabled={isProcessing}
+                            className="flex-1 rounded-lg border border-slate-200 bg-transparent px-2 py-1.5 text-xs focus:border-brand-accent focus:outline-none disabled:opacity-50 dark:border-slate-700"
+                          />
+                          <button
+                            type="submit"
+                            disabled={isProcessing}
+                            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                          >
+                            {t("syncSend")}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Select an email to compose a reply</p>
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
           </div>
         )}
@@ -2284,41 +3300,256 @@ const SyncPage = () => {
           />
         )}
 
-        {activeTab === "calendar" && (
-          <div className="space-y-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex-1" />
+        {/* Copilot Panel */}
+        {isAiCopilotEnabled() && showCopilotPanel && selectedEmail && (
+          <div className="fixed inset-y-0 right-0 w-full md:w-96 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-xl z-50 flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                Copilot
+              </h3>
               <button
-                onClick={handleConnectCalendar}
-                disabled={isConnectingCalendar || isCalendarConnected}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  isCalendarConnected
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400"
-                    : "border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                onClick={() => {
+                  setShowCopilotPanel(false);
+                  setCopilotMode(null);
+                  setCopilotInsights(null);
+                }}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
               >
-                {isConnectingCalendar ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t("syncConnecting")}
-                  </>
-                ) : isCalendarConnected ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    {t("syncCalendarConnected")}
-                  </>
-                ) : (
-                  <>
-                    <CalendarIcon className="h-4 w-4" />
-                    {t("syncConnectGoogleCalendar")}
-                  </>
-                )}
+                <X className="h-5 w-5" />
               </button>
             </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {!copilotMode ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={async () => {
+                      setCopilotMode("summary");
+                      setLoadingCopilot(true);
+                      try {
+                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                        if (!session?.access_token) return;
+                        const res = await fetch(`/api/sync/email/${selectedEmail.id}/copilot`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                          },
+                          body: JSON.stringify({ mode: "summary" }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setCopilotInsights(data.insights);
+                        }
+                      } catch (error) {
+                        console.error("Error loading copilot:", error);
+                      } finally {
+                        setLoadingCopilot(false);
+                      }
+                    }}
+                    className="w-full text-left p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-semibold text-sm">Summarize conversation</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Get a summary of key points</div>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setCopilotMode("next_step");
+                      setLoadingCopilot(true);
+                      try {
+                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                        if (!session?.access_token) return;
+                        const res = await fetch(`/api/sync/email/${selectedEmail.id}/copilot`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                          },
+                          body: JSON.stringify({ mode: "next_step" }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setCopilotInsights(data.insights);
+                        }
+                      } catch (error) {
+                        console.error("Error loading copilot:", error);
+                      } finally {
+                        setLoadingCopilot(false);
+                      }
+                    }}
+                    className="w-full text-left p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-semibold text-sm">Suggest next step</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Get recommendations for next actions</div>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setCopilotMode("risk_analysis");
+                      setLoadingCopilot(true);
+                      try {
+                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                        if (!session?.access_token) return;
+                        const res = await fetch(`/api/sync/email/${selectedEmail.id}/copilot`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                          },
+                          body: JSON.stringify({ mode: "risk_analysis" }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setCopilotInsights(data.insights);
+                        }
+                      } catch (error) {
+                        console.error("Error loading copilot:", error);
+                      } finally {
+                        setLoadingCopilot(false);
+                      }
+                    }}
+                    className="w-full text-left p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-semibold text-sm">Analyze risks & opportunities</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Identify potential issues and opportunities</div>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setCopilotMode("proposal_hint");
+                      setLoadingCopilot(true);
+                      try {
+                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+                        if (!session?.access_token) return;
+                        const res = await fetch(`/api/sync/email/${selectedEmail.id}/copilot`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${session.access_token}`,
+                          },
+                          body: JSON.stringify({ mode: "proposal_hint" }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setCopilotInsights(data.insights);
+                        }
+                      } catch (error) {
+                        console.error("Error loading copilot:", error);
+                      } finally {
+                        setLoadingCopilot(false);
+                      }
+                    }}
+                    className="w-full text-left p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-semibold text-sm">Suggest proposal angle</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Get ideas for proposals or pitches</div>
+                  </button>
+                </div>
+              ) : loadingCopilot ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+                </div>
+              ) : copilotInsights ? (
+                <div className="space-y-4">
+                  {copilotInsights.summary && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Summary</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">{copilotInsights.summary}</p>
+                    </div>
+                  )}
+                  {copilotInsights.key_points && copilotInsights.key_points.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Key Points</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        {copilotInsights.key_points.map((point: string, idx: number) => (
+                          <li key={idx}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {copilotInsights.risks && copilotInsights.risks.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2 text-red-600 dark:text-red-400">Risks</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        {copilotInsights.risks.map((risk: string, idx: number) => (
+                          <li key={idx}>{risk}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {copilotInsights.opportunities && copilotInsights.opportunities.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2 text-green-600 dark:text-green-400">Opportunities</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        {copilotInsights.opportunities.map((opp: string, idx: number) => (
+                          <li key={idx}>{opp}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {copilotInsights.recommended_next_step && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Recommended Next Step</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">{copilotInsights.recommended_next_step}</p>
+                    </div>
+                  )}
+                  {copilotInsights.suggested_reply_outline && copilotInsights.suggested_reply_outline.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Suggested Reply Outline</h4>
+                      <ol className="list-decimal list-inside space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        {copilotInsights.suggested_reply_outline.map((outline: string, idx: number) => (
+                          <li key={idx}>{outline}</li>
+                        ))}
+                      </ol>
+                      <button
+                        onClick={() => {
+                          // Insert outline into draft composer
+                          const outlineText = copilotInsights.suggested_reply_outline.join("\n\n");
+                          // This would need to be integrated with the draft composer
+                          alert("Insert as draft functionality would go here");
+                        }}
+                        className="mt-2 w-full px-3 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                      >
+                        Insert as draft
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      setCopilotMode(null);
+                      setCopilotInsights(null);
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    Back
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
 
-            <div className="space-y-6">
-              {/* Demo mode banner removed - demo mode is disabled for authenticated users */}
-                <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+        {activeTab === "today" && isTodayDashboardEnabled() && (
+          <div className="space-y-6">
+            <header>
+              <h2 className="text-2xl font-semibold">Today</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Tasks, reminders, meetings, and follow-ups for today
+              </p>
+            </header>
+
+            {isAuthenticated ? (
+              <TodayDashboard userId={null} />
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-sm text-slate-500">Please log in to view today&apos;s items</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "calendar" && (
+          <div className="space-y-6">
+            {/* Demo mode banner removed - demo mode is disabled for authenticated users */}
+            <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/40">
                   <button
                     onClick={() => {
                       const newDate = new Date(selectedDate);
@@ -2391,8 +3622,10 @@ const SyncPage = () => {
                     <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
                     <span className="ml-2 text-sm text-slate-500">{t("syncLoadingCalendarEvents")}</span>
                   </div>
-                ) : calendarView === "week" ? (
-                  <div className="rounded-3xl border border-slate-200 bg-white/80 dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden">
+                ) : (
+                  <div className="relative">
+                    {calendarView === "week" ? (
+                      <div className="rounded-3xl border border-slate-200 bg-white/80 dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden">
                     {/* Header - Desktop/Tablet */}
                     <div className="hidden md:grid grid-cols-8 gap-2 px-6 pt-6 pb-4 border-b border-slate-200 dark:border-slate-800">
                       <div className="text-xs font-semibold uppercase text-slate-500"></div>
@@ -2813,8 +4046,8 @@ const SyncPage = () => {
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+                    ) : (
+                      <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40 relative">
                     <div className="grid grid-cols-7 gap-2 mb-4">
                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
                         <div key={day} className="text-center text-xs font-semibold uppercase text-slate-500 py-2">
@@ -2931,146 +4164,18 @@ const SyncPage = () => {
                       })}
                     </div>
                   </div>
-                )}
-                
-                {/* Custom Alert Form */}
-                <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">{t("syncCustomAlerts" as any)}</h3>
+                    )}
+                    
+                    {/* Floating Add Alert Button */}
                     <button
-                      onClick={() => setShowAlertForm(!showAlertForm)}
-                      className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      onClick={() => setShowAlertForm(true)}
+                      className="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-slate-800 transition-all hover:scale-105 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                     >
-                      {showAlertForm ? (
-                        <>
-                          <X className="h-4 w-4" />
-                          {t("syncCancel" as any)}
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4" />
-                          {t("syncAddAlert" as any)}
-                        </>
-                      )}
+                      <Plus className="h-4 w-4" />
+                      {t("syncAddAlert" as any)}
                     </button>
                   </div>
-
-                  {showAlertForm && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleAddCustomAlert();
-                      }}
-                      className="space-y-4"
-                    >
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {/* Icon Selection */}
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">{t("syncAlertIcon" as any)}</label>
-                          <div className="grid grid-cols-4 gap-2">
-                            {[
-                              { name: "AlertTriangle", icon: AlertTriangle, color: "text-orange-500" },
-                              { name: "CalendarCheck", icon: CalendarCheck, color: "text-brand-accent" },
-                              { name: "Info", icon: Info, color: "text-brand-accent" },
-                              { name: "CheckCircle", icon: CheckCircle, color: "text-emerald-500" },
-                              { name: "AlertCircle", icon: AlertCircle, color: "text-orange-500" },
-                              { name: "Clock", icon: Clock, color: "text-brand-accent" },
-                              { name: "MapPin", icon: MapPin, color: "text-brand-accent" },
-                              { name: "Users", icon: Users, color: "text-brand-accent" },
-                            ].map(({ name, icon: Icon, color }) => (
-                              <button
-                                key={name}
-                                type="button"
-                                onClick={() => setNewAlert({ ...newAlert, icon: name })}
-                                className={`p-3 rounded-2xl border transition ${
-                                  newAlert.icon === name
-                                    ? "border-brand-accent bg-brand-accent/10"
-                                    : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                }`}
-                              >
-                                <Icon className={`h-5 w-5 ${color} mx-auto`} />
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Title */}
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">{t("syncAlertTitle" as any)}</label>
-                          <input
-                            type="text"
-                            value={newAlert.title || ""}
-                            onChange={(e) => setNewAlert({ ...newAlert, title: e.target.value })}
-                            placeholder={t("syncAlertTitlePlaceholder" as any)}
-                            required
-                            className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
-                          />
-                        </div>
-
-                        {/* Description */}
-                        <div className="sm:col-span-2">
-                          <label className="block text-sm font-semibold mb-2">{t("syncAlertDescription" as any)}</label>
-                          <textarea
-                            value={newAlert.description || ""}
-                            onChange={(e) => setNewAlert({ ...newAlert, description: e.target.value })}
-                            placeholder={t("syncAlertDescriptionPlaceholder" as any)}
-                            rows={2}
-                            className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
-                          />
-                        </div>
-
-                        {/* Date */}
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">{t("syncAlertDate" as any)}</label>
-                          <input
-                            type="date"
-                            value={newAlert.date || ""}
-                            onChange={(e) => setNewAlert({ ...newAlert, date: e.target.value })}
-                            required
-                            className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
-                          />
-                        </div>
-
-                        {/* Time */}
-                        <div>
-                          <label className="block text-sm font-semibold mb-2">{t("syncAlertTime" as any)} ({t("syncOptional" as any)})</label>
-                          <input
-                            type="time"
-                            value={newAlert.time || ""}
-                            onChange={(e) => setNewAlert({ ...newAlert, time: e.target.value })}
-                            className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <button
-                          type="submit"
-                          className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-                        >
-                          {t("syncAddAlert" as any)}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAlertForm(false);
-                            setNewAlert({
-                              icon: "AlertTriangle",
-                              title: "",
-                              description: "",
-                              date: "",
-                              time: "",
-                            });
-                          }}
-                          className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                        >
-                          {t("syncCancel" as any)}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-            </div>
+                )}
 
             {/* Alert Detail Modal */}
             {showAlertModal && selectedAlert && (
@@ -3521,60 +4626,222 @@ const SyncPage = () => {
         )}
       </div>
 
+      {/* Custom Alert Form Modal */}
+      {showAlertForm && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAlertForm(false);
+              setNewAlert({
+                icon: "AlertTriangle",
+                title: "",
+                description: "",
+                date: "",
+                time: "",
+              });
+            }
+          }}
+        >
+          <div 
+            className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold">{t("syncAddAlert" as any)}</h2>
+              <button
+                onClick={() => {
+                  setShowAlertForm(false);
+                  setNewAlert({
+                    icon: "AlertTriangle",
+                    title: "",
+                    description: "",
+                    date: "",
+                    time: "",
+                  });
+                }}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddCustomAlert();
+              }}
+              className="space-y-4"
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Icon Selection */}
+                <div>
+                  <label className="block text-sm font-semibold mb-2">{t("syncAlertIcon" as any)}</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { name: "AlertTriangle", icon: AlertTriangle, color: "text-orange-500" },
+                      { name: "CalendarCheck", icon: CalendarCheck, color: "text-brand-accent" },
+                      { name: "Info", icon: Info, color: "text-brand-accent" },
+                      { name: "CheckCircle", icon: CheckCircle, color: "text-emerald-500" },
+                      { name: "AlertCircle", icon: AlertCircle, color: "text-orange-500" },
+                      { name: "Clock", icon: Clock, color: "text-brand-accent" },
+                      { name: "MapPin", icon: MapPin, color: "text-brand-accent" },
+                      { name: "Users", icon: Users, color: "text-brand-accent" },
+                    ].map(({ name, icon: Icon, color }) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setNewAlert({ ...newAlert, icon: name })}
+                        className={`p-3 rounded-2xl border transition ${
+                          newAlert.icon === name
+                            ? "border-brand-accent bg-brand-accent/10"
+                            : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        <Icon className={`h-5 w-5 ${color} mx-auto`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-semibold mb-2">{t("syncAlertTitle" as any)}</label>
+                  <input
+                    type="text"
+                    value={newAlert.title || ""}
+                    onChange={(e) => setNewAlert({ ...newAlert, title: e.target.value })}
+                    placeholder={t("syncAlertTitlePlaceholder" as any)}
+                    required
+                    className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold mb-2">{t("syncAlertDescription" as any)}</label>
+                  <textarea
+                    value={newAlert.description || ""}
+                    onChange={(e) => setNewAlert({ ...newAlert, description: e.target.value })}
+                    placeholder={t("syncAlertDescriptionPlaceholder" as any)}
+                    rows={2}
+                    className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
+                  />
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-semibold mb-2">{t("syncAlertDate" as any)}</label>
+                  <input
+                    type="date"
+                    value={newAlert.date || ""}
+                    onChange={(e) => setNewAlert({ ...newAlert, date: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
+                  />
+                </div>
+
+                {/* Time */}
+                <div>
+                  <label className="block text-sm font-semibold mb-2">{t("syncAlertTime" as any)} ({t("syncOptional" as any)})</label>
+                  <input
+                    type="time"
+                    value={newAlert.time || ""}
+                    onChange={(e) => setNewAlert({ ...newAlert, time: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm focus:border-brand-accent focus:outline-none dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                >
+                  {t("syncAddAlert" as any)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAlertForm(false);
+                    setNewAlert({
+                      icon: "AlertTriangle",
+                      title: "",
+                      description: "",
+                      date: "",
+                      time: "",
+                    });
+                  }}
+                  className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  {t("syncCancel" as any)}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+        {activeTab === "insights" && (
+          <InsightsTabContentSync onSwitchTab={setActiveTab} />
+        )}
+
       {/* Send Email Modal */}
       {selectedEmail && (
-        <SendEmailModal
-          open={showSendModal}
-          onClose={() => setShowSendModal(false)}
-          email={{
-            id: selectedEmail.id,
-            to: "from_address" in selectedEmail 
-              ? selectedEmail.from_address 
-              : "fromAddress" in selectedEmail 
-                ? selectedEmail.fromAddress 
-                : "",
-            toName: "from_name" in selectedEmail 
-              ? selectedEmail.from_name 
-              : "sender" in selectedEmail 
-                ? selectedEmail.sender 
-                : null,
-            subject: getEmailSubject(selectedEmail) || "",
-            body: getEmailDraft(selectedEmail) || "",
-            threadId: "gmail_thread_id" in selectedEmail 
-              ? selectedEmail.gmail_thread_id 
-              : undefined,
-          }}
-          onSendSuccess={handleSendSuccess}
-        />
-        
-        {/* Edit Draft Modal */}
-        <EditDraftModal
-          open={showEditDraftModal}
-          onClose={() => setShowEditDraftModal(false)}
-          email={{
-            id: selectedEmail.id,
-            to: "from_address" in selectedEmail 
-              ? selectedEmail.from_address 
-              : "fromAddress" in selectedEmail 
-                ? selectedEmail.fromAddress 
-                : "",
-            toName: "from_name" in selectedEmail 
-              ? selectedEmail.from_name 
-              : "sender" in selectedEmail 
-                ? selectedEmail.sender 
-                : null,
-            subject: `Re: ${getEmailSubject(selectedEmail) || ""}`,
-            body: getEmailDraft(selectedEmail) || "",
-            originalFrom: getEmailSender(selectedEmail),
-            originalBody: ("body_text" in selectedEmail && selectedEmail.body_text) 
-              ? selectedEmail.body_text 
-              : ("body_html" in selectedEmail && selectedEmail.body_html)
-              ? selectedEmail.body_html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-              : getEmailSnippet(selectedEmail) || "",
-          }}
-          onSave={handleSaveDraftFromModal}
-          isSaving={isSavingDraft}
-        />
+        <>
+          <SendEmailModal
+            open={showSendModal}
+            onClose={() => setShowSendModal(false)}
+            email={{
+              id: selectedEmail.id,
+              to: "from_address" in selectedEmail 
+                ? selectedEmail.from_address 
+                : "fromAddress" in selectedEmail 
+                  ? selectedEmail.fromAddress 
+                  : "",
+              toName: "from_name" in selectedEmail 
+                ? selectedEmail.from_name 
+                : "sender" in selectedEmail 
+                  ? selectedEmail.sender 
+                  : null,
+              subject: getEmailSubject(selectedEmail) || "",
+              body: getEmailDraft(selectedEmail) || "",
+              threadId: "gmail_thread_id" in selectedEmail 
+                ? selectedEmail.gmail_thread_id 
+                : undefined,
+            }}
+            onSendSuccess={handleSendSuccess}
+          />
+          
+          {/* Edit Draft Modal */}
+          <EditDraftModal
+            open={showEditDraftModal}
+            onClose={() => setShowEditDraftModal(false)}
+            email={{
+              id: selectedEmail.id,
+              to: "from_address" in selectedEmail 
+                ? selectedEmail.from_address 
+                : "fromAddress" in selectedEmail 
+                  ? selectedEmail.fromAddress 
+                  : "",
+              toName: "from_name" in selectedEmail 
+                ? selectedEmail.from_name 
+                : "sender" in selectedEmail 
+                  ? selectedEmail.sender 
+                  : null,
+              subject: `Re: ${getEmailSubject(selectedEmail) || ""}`,
+              body: getEmailDraft(selectedEmail) || "",
+              originalFrom: getEmailSender(selectedEmail),
+              originalBody: ("body_text" in selectedEmail && selectedEmail.body_text) 
+                ? selectedEmail.body_text 
+                : ("body_html" in selectedEmail && selectedEmail.body_html)
+                ? selectedEmail.body_html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+                : getEmailSnippet(selectedEmail) || "",
+            }}
+            onSave={handleSaveDraftFromModal}
+            isSaving={isSavingDraft}
+          />
+        </>
       )}
     </div>
   );

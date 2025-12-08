@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { initialGmailSync, incrementalGmailSync } from "@/lib/gmail/sync";
+import { getOrCreateWorkspace, getWorkspaceIntegration } from "@/lib/sync/integrations";
 
 /**
  * POST /api/gmail/sync
  * Trigger Gmail sync (initial or incremental)
+ * Now uses integrations table instead of gmail_connections
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,23 +32,23 @@ export async function POST(request: NextRequest) {
 
     const userId = userResult.user.id;
 
-    // Check if Gmail is connected
-    const { data: connection } = await supabase
-      .from("gmail_connections")
-      .select("last_history_id")
-      .eq("user_id", userId)
-      .single();
+    // Get or create workspace
+    const workspace = await getOrCreateWorkspace(userId);
 
-    if (!connection) {
+    // Check if Gmail is connected (using integrations table)
+    const integration = await getWorkspaceIntegration(workspace.id, "gmail");
+
+    if (!integration || !integration.is_active) {
       return NextResponse.json(
-        { error: "Gmail not connected" },
+        { error: "Gmail not connected. Please connect Gmail first." },
         { status: 400 }
       );
     }
 
     // Determine sync type
     const body = await request.json().catch(() => ({}));
-    const syncType = body.type || (connection.last_history_id ? "incremental" : "initial");
+    // For now, default to initial if no last_synced_at, otherwise incremental
+    const syncType = body.type || (integration.last_synced_at ? "incremental" : "initial");
 
     let result;
     if (syncType === "initial") {
@@ -77,6 +79,7 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/gmail/sync
  * Get sync status
+ * Now uses integrations table instead of gmail_connections
  */
 export async function GET(request: NextRequest) {
   try {
@@ -101,13 +104,13 @@ export async function GET(request: NextRequest) {
 
     const userId = userResult.user.id;
 
-    const { data: connection } = await supabase
-      .from("gmail_connections")
-      .select("last_sync_at, sync_status, sync_error, last_history_id")
-      .eq("user_id", userId)
-      .single();
+    // Get or create workspace
+    const workspace = await getOrCreateWorkspace(userId);
 
-    if (!connection) {
+    // Get Gmail integration
+    const integration = await getWorkspaceIntegration(workspace.id, "gmail");
+
+    if (!integration || !integration.is_active) {
       return NextResponse.json({
         connected: false,
       });
@@ -115,10 +118,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       connected: true,
-      lastSyncAt: connection.last_sync_at,
-      syncStatus: connection.sync_status,
-      syncError: connection.sync_error,
-      lastHistoryId: connection.last_history_id,
+      lastSyncAt: integration.last_synced_at,
+      syncStatus: integration.sync_status || "idle",
+      syncError: integration.last_error,
+      lastHistoryId: null, // Not stored in integrations table, would need to add if needed
     });
   } catch (error: any) {
     console.error("Error getting sync status:", error);

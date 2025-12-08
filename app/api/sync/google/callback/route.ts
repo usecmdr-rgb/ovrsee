@@ -45,20 +45,41 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange code for tokens
+    console.log("[OAuth Callback] Exchanging authorization code for tokens...");
     const tokens = await exchangeCodeForTokens(code);
+    
+    console.log("[OAuth Callback] Tokens received:", {
+      hasAccessToken: !!tokens.accessToken,
+      accessTokenType: typeof tokens.accessToken,
+      accessTokenLength: tokens.accessToken?.length,
+      accessTokenPreview: tokens.accessToken ? tokens.accessToken.substring(0, 20) + "..." : "NULL",
+      hasIdToken: !!tokens.idToken,
+      idTokenLength: tokens.idToken?.length,
+      hasRefreshToken: !!tokens.refreshToken,
+      scopes: tokens.scope,
+    });
 
-    // Get user email from Google
-    const email = await getGoogleUserEmail(tokens.accessToken);
+    // Validate access token before using it
+    if (!tokens.accessToken || tokens.accessToken.trim() === "") {
+      console.error("[OAuth Callback] Access token is missing or empty!");
+      throw new Error("Access token is missing from token exchange response");
+    }
 
-    // Store integration
+    // Get user email from Google (try ID token first, fallback to userinfo API)
+    console.log("[OAuth Callback] Getting user email...");
+    const email = await getGoogleUserEmail(tokens.accessToken, tokens.idToken);
+    console.log("[OAuth Callback] User email retrieved:", email);
+
+    // Store integration (preserve existing refresh token if new one is not provided)
     await upsertGoogleIntegration({
       workspaceId: state.workspaceId,
       userId: state.userId,
       email,
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      refreshToken: tokens.refreshToken, // May be null if Google didn't return one
       expiresAt: tokens.expiresAt,
       scopes: tokens.scope,
+      preserveRefreshToken: true, // Preserve existing refresh token if new one is null
     });
 
     // Redirect to returnTo or default to /sync

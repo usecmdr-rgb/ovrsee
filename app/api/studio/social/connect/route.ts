@@ -33,8 +33,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // This endpoint is deprecated - OAuth callbacks now handle account creation
+    // Keeping for backwards compatibility but it should redirect to OAuth flow
+    // TODO: Remove this endpoint or make it redirect to OAuth
+    
+    // For now, return error suggesting user use OAuth flow
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Please use OAuth flow to connect accounts. This endpoint is deprecated.",
+        redirect_to_oauth: true,
+      },
+      { status: 400, headers: responseHeaders }
+    );
+
+    // Legacy code (commented out):
     // Upsert into studio_social_accounts with status = 'connected'
     // For now, we simulate connected state until real OAuth is implemented
+    /*
     const { data: account, error: accountError } = await supabaseClient
       .from("studio_social_accounts")
       .upsert(
@@ -57,6 +73,7 @@ export async function POST(request: NextRequest) {
       )
       .select()
       .single();
+    */
 
     if (accountError) {
       console.error("Error connecting social account:", accountError);

@@ -31,6 +31,7 @@ JWT_SECRET=your_jwt_secret_here
 # Development: http://localhost:3000
 # Production: https://ovrsee.ai
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
 
 # ============================================================================
 # Telephony Provider (Twilio)
@@ -103,6 +104,14 @@ STRIPE_PRICE_ID_EXECUTIVE_YEARLY=price_your_executive_yearly_price_id
 # Add-ons (optional)
 # STRIPE_PRICE_ID_ALOHA_ADDON=price_your_aloha_addon_price_id
 # STRIPE_PRICE_ID_STUDIO_ADDON=price_your_studio_addon_price_id
+
+# ============================================================================
+# Social Media OAuth (Facebook / Instagram / TikTok)
+# ============================================================================
+FACEBOOK_APP_ID=your_facebook_app_id
+FACEBOOK_APP_SECRET=your_facebook_app_secret
+TIKTOK_CLIENT_KEY=your_tiktok_client_key
+TIKTOK_CLIENT_SECRET=your_tiktok_client_secret
 
 # ============================================================================
 # Analytics & Monitoring (Optional)

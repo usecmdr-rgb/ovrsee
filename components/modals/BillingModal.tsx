@@ -36,17 +36,30 @@ const BillingModal = () => {
         }),
       });
 
-      const { url, error } = await response.json();
+      const data = await response.json();
+      const { url, error, code, message } = data;
 
       if (error) {
+        // Handle "no subscription" case gracefully
+        if (code === "NO_SUBSCRIPTION" || message?.includes("No active subscription")) {
+          // Show friendly message and redirect to pricing
+          alert(message || "You don't have an active subscription yet. Please visit the pricing page to get started.");
+          // Optionally redirect to pricing page
+          window.location.href = "/pricing";
+          setLoading(false);
+          return;
+        }
+        
         console.error("Portal error:", error);
-        alert(t("billingFailedToOpenPortal"));
+        alert(t("billingFailedToOpenPortal") || error || "Failed to open billing portal");
         setLoading(false);
         return;
       }
 
       if (url) {
         window.location.href = url;
+      } else {
+        setLoading(false);
       }
     } catch (error) {
       console.error("Portal error:", error);
@@ -73,6 +86,9 @@ const BillingModal = () => {
         >
           {loading ? t("loading") : t("billingManageButton")}
         </button>
+        <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+          {t("billingNoSubscriptionNote") || "Don't have a subscription? Visit the pricing page to get started."}
+        </p>
       </div>
     </Modal>
   );

@@ -56,16 +56,24 @@ export async function POST(request: NextRequest) {
       billingInterval,
       tier: legacyTier,
       billingCycle: legacyBillingInterval,
+      seatCount,
+      seats: seatData,
     } = validation.data as {
       planCode?: CorePlanCode;
       billingInterval?: BillingInterval;
       tier?: "free" | "basic" | "advanced" | "elite";
       billingCycle?: BillingInterval;
+      seatCount?: number;
+      seats?: Array<{
+        tier: "basic" | "advanced" | "elite";
+        email?: string;
+        name?: string;
+      }>;
     };
 
     // Canonical inputs (new API)
     let planCode: CorePlanCode | null = rawPlanCode ?? null;
-    let interval: BillingInterval = billingInterval || legacyBillingInterval || "monthly";
+    let interval: BillingInterval = billingInterval ?? legacyBillingInterval ?? "monthly";
 
     // Backwards compatibility: map legacy tier → planCode if planCode not provided
     if (!planCode) {
@@ -79,6 +87,9 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = user.id; // Use authenticated user's ID, ignore any userId in request
+
+    // Compute quantity from seatCount (default to 1 for backward compatibility)
+    const quantity = seatCount && seatCount > 0 ? seatCount : 1;
 
     // Get Stripe price ID based on billing interval
     const priceId = getStripePriceId(planCode, interval);
@@ -231,7 +242,7 @@ export async function POST(request: NextRequest) {
       line_items: [
         {
           price: validatedPriceId, // Use validated price ID (must start with "price_")
-          quantity: 1,
+          quantity,
         },
       ],
       success_url: `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000"}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -243,6 +254,17 @@ export async function POST(request: NextRequest) {
         userId, // Store userId in metadata for webhook processing
         is_trial_conversion: isTrialConversion ? "true" : "false",
         is_essentials_trial: canUseTrial ? "true" : "false", // Track if this is an Essentials trial
+        seatCount: String(quantity), // Store seat count for webhook processing
+        // Store seat emails if provided (for post-checkout invite creation)
+        ...(seatData && seatData.length > 0
+          ? {
+              seatEmails: JSON.stringify(
+                seatData
+                  .filter((s) => s.email && s.email.trim() !== "")
+                  .map((s) => ({ email: s.email, tier: s.tier, name: s.name }))
+              ),
+            }
+          : {}),
       },
       // Apply trial_period_days ONLY for Essentials if eligible (Professional/Executive get no trial)
       subscription_data: subscriptionData,

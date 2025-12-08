@@ -393,3 +393,4 @@ COMMENT ON COLUMN public.call_logs.has_voicemail IS 'Whether this call resulted 
 
 
 
+

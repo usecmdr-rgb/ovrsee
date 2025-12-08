@@ -80,3 +80,4 @@ If you see files listed, dependencies are installed ✅
 **Remember**: The mobile app (`ovrsee-mobile/`) is a **completely separate project** from the web app (`COMMANDX/`). They have different dependencies and must be run separately!
 
 
+

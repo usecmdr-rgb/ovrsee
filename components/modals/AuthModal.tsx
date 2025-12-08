@@ -15,6 +15,10 @@ const AuthModal = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   // Helper function to convert Supabase errors to user-friendly messages
   const getErrorMessage = (error: any, mode: "login" | "signup"): string => {
@@ -142,6 +146,26 @@ const AuthModal = () => {
 
         if (!signupRes.ok) {
           const data = await signupRes.json().catch(() => ({}));
+          
+          // Handle email already exists - show message and redirect to login
+          if (signupRes.status === 409 || data.error?.includes("already exists")) {
+            setError("An account with this email already exists. Please sign in instead.");
+            // Wait a moment then switch to login mode
+            setTimeout(() => {
+              closeAuthModal();
+              setTimeout(() => {
+                openAuthModal("login");
+                // Pre-fill email in login form
+                const emailInput = document.getElementById("auth-email") as HTMLInputElement;
+                if (emailInput) {
+                  emailInput.value = email;
+                }
+              }, 300);
+            }, 2000);
+            setIsSubmitting(false);
+            return;
+          }
+          
           const errorMsg = getErrorMessage(
             { message: data.error, status: signupRes.status },
             "signup"
@@ -188,7 +212,14 @@ const AuthModal = () => {
       closeAuthModal();
       // Give Supabase/session state a moment to propagate
       await new Promise((resolve) => setTimeout(resolve, 150));
-      router.push("/app");
+      
+      // Check if there's an activation token - if so, redirect to activation page
+      const activationToken = sessionStorage.getItem("activation_token");
+      if (activationToken) {
+        router.push(`/activate-seat?token=${activationToken}`);
+      } else {
+        router.push("/app");
+      }
     } catch (err: any) {
       console.error("Authentication error:", err);
       // Errors thrown from our code are already user-friendly messages
@@ -211,6 +242,40 @@ const AuthModal = () => {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotPasswordEmail) {
+      setError("Please enter your email address");
+      return;
+    }
+
+    setIsSendingReset(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: forgotPasswordEmail }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send reset email");
+      }
+
+      setForgotPasswordSent(true);
+    } catch (err: any) {
+      console.error("Forgot password error:", err);
+      setError(err.message || "Failed to send password reset email. Please try again.");
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -269,103 +334,185 @@ const AuthModal = () => {
 
   return (
     <Modal
-      title={authModalMode === "signup" ? t("createAccount") : t("welcomeBack")}
-      description={t("authModalDescription")}
+      title={showForgotPassword ? "Reset Your Password" : authModalMode === "signup" ? t("createAccount") : t("welcomeBack")}
+      description={showForgotPassword ? "Enter your email address and we'll send you a link to reset your password." : t("authModalDescription")}
       open={Boolean(authModalMode)}
       onClose={closeAuthModal}
     >
-      <div className="space-y-4">
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          aria-label={t("continueWithGoogle")}
-          className="flex w-full items-center justify-center space-x-2 rounded-full border border-slate-200 px-4 py-2 font-medium shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:hover:bg-slate-900 dark:focus-visible:outline-white disabled:opacity-60 disabled:cursor-not-allowed"
-          disabled={isSubmitting || isGoogleLoading}
-        >
-          <Mail size={18} aria-hidden="true" />
-          <span>{isGoogleLoading ? "Connecting..." : t("continueWithGoogle")}</span>
-        </button>
-        <div className="text-center text-xs uppercase tracking-widest text-slate-400">
-          {t("orUseEmail")}
-        </div>
-        <form className="space-y-3" onSubmit={handleSubmit} noValidate>
-          <div>
-            <label htmlFor="auth-email" className="text-sm font-medium">
-              {t("email")} <span className="text-red-500" aria-label={t("required")}>*</span>
-            </label>
-            <input
-              id="auth-email"
-              name="email"
-              type="email"
-              required
-              aria-required="true"
-              aria-invalid={error ? "true" : "false"}
-              aria-describedby={error ? "auth-error" : undefined}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
-              placeholder={t("placeholderEmail")}
-              disabled={isSubmitting}
-            />
-          </div>
-          <div>
-            <label htmlFor="auth-password" className="text-sm font-medium">
-              {t("password")} <span className="text-red-500" aria-label={t("required")}>*</span>
-            </label>
-            <input
-              id="auth-password"
-              name="password"
-              type="password"
-              required
-              aria-required="true"
-              aria-invalid={error ? "true" : "false"}
-              aria-describedby={error ? "auth-error" : undefined}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
-              placeholder={t("placeholderPassword")}
-              disabled={isSubmitting}
-            />
-          </div>
-          {authModalMode === "signup" && (
+      {showForgotPassword ? (
+        <div className="space-y-4">
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); handleForgotPassword(e); }} noValidate>
             <div>
-              <label htmlFor="auth-company-name" className="text-sm font-medium">
-                {t("companyName")}
+              <label htmlFor="forgot-email" className="text-sm font-medium">
+                Email <span className="text-red-500">*</span>
               </label>
               <input
-                id="auth-company-name"
-                name="companyName"
-                type="text"
+                id="forgot-email"
+                type="email"
+                value={forgotPasswordEmail}
+                onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                required
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
+                placeholder="Enter your email"
+                disabled={isSendingReset || forgotPasswordSent}
+              />
+            </div>
+            {error && (
+              <div 
+                id="auth-error"
+                role="alert"
+                aria-live="assertive"
+                className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20"
+              >
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {error}
+                </p>
+              </div>
+            )}
+            {forgotPasswordSent ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  If an account exists with this email, a password reset link has been sent. Please check your inbox.
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotPasswordEmail("");
+                    setForgotPasswordSent(false);
+                    setError(null);
+                  }}
+                  className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Back to Login
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSendingReset || !forgotPasswordEmail}
+                  className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  {isSendingReset ? "Sending..." : "Send Reset Link"}
+                </button>
+              </div>
+            )}
+          </form>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            aria-label={t("continueWithGoogle")}
+            className="flex w-full items-center justify-center space-x-2 rounded-full border border-slate-200 px-4 py-2 font-medium shadow-sm hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:hover:bg-slate-900 dark:focus-visible:outline-white disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={isSubmitting || isGoogleLoading}
+          >
+            <Mail size={18} aria-hidden="true" />
+            <span>{isGoogleLoading ? "Connecting..." : t("continueWithGoogle")}</span>
+          </button>
+          <div className="text-center text-xs uppercase tracking-widest text-slate-400">
+            {t("orUseEmail")}
+          </div>
+          <form className="space-y-3" onSubmit={handleSubmit} noValidate>
+            <div>
+              <label htmlFor="auth-email" className="text-sm font-medium">
+                {t("email")} <span className="text-red-500" aria-label={t("required")}>*</span>
+              </label>
+              <input
+                id="auth-email"
+                name="email"
+                type="email"
+                required
+                aria-required="true"
                 aria-invalid={error ? "true" : "false"}
                 aria-describedby={error ? "auth-error" : undefined}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
-                placeholder={t("placeholderCompany")}
+                placeholder={t("placeholderEmail")}
                 disabled={isSubmitting}
               />
             </div>
-          )}
-          {error && (
-            <div 
-              id="auth-error"
-              role="alert"
-              aria-live="assertive"
-              className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20"
-            >
-              <p className="text-xs text-red-600 dark:text-red-400">
-                {error}
-              </p>
+            <div>
+              <label htmlFor="auth-password" className="text-sm font-medium">
+                {t("password")} <span className="text-red-500" aria-label={t("required")}>*</span>
+              </label>
+              <input
+                id="auth-password"
+                name="password"
+                type="password"
+                required
+                aria-required="true"
+                aria-invalid={error ? "true" : "false"}
+                aria-describedby={error ? "auth-error" : undefined}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
+                placeholder={t("placeholderPassword")}
+                disabled={isSubmitting}
+              />
             </div>
-          )}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            aria-busy={isSubmitting}
-            className="mt-2 w-full rounded-full bg-slate-900 px-4 py-2 font-semibold text-white shadow-lg hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:focus-visible:outline-white"
-          >
-            {isSubmitting
-              ? authModalMode === "signup"
-                ? t("authCreatingAccount")
-                : t("authSigningIn")
-              : t("continue")}
-          </button>
-        </form>
-      </div>
+            {authModalMode === "signup" && (
+              <div>
+                <label htmlFor="auth-company-name" className="text-sm font-medium">
+                  {t("companyName")}
+                </label>
+                <input
+                  id="auth-company-name"
+                  name="companyName"
+                  type="text"
+                  aria-invalid={error ? "true" : "false"}
+                  aria-describedby={error ? "auth-error" : undefined}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 focus:border-brand-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 dark:border-slate-700"
+                  placeholder={t("placeholderCompany")}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
+            {error && (
+              <div 
+                id="auth-error"
+                role="alert"
+                aria-live="assertive"
+                className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20"
+              >
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {error}
+                </p>
+              </div>
+            )}
+            {authModalMode === "login" && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(true);
+                    setError(null);
+                    // Pre-fill email if available
+                    const emailInput = document.getElementById("auth-email") as HTMLInputElement;
+                    if (emailInput?.value) {
+                      setForgotPasswordEmail(emailInput.value);
+                    }
+                  }}
+                  className="text-xs text-slate-600 hover:text-slate-900 underline dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              className="mt-2 w-full rounded-full bg-slate-900 px-4 py-2 font-semibold text-white shadow-lg hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:focus-visible:outline-white"
+            >
+              {isSubmitting
+                ? authModalMode === "signup"
+                  ? t("authCreatingAccount")
+                  : t("authSigningIn")
+                : t("continue")}
+            </button>
+          </form>
+        </div>
+      )}
     </Modal>
   );
 };

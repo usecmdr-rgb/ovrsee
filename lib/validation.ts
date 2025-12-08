@@ -44,6 +44,15 @@ export const emailSchema = z.string().email("Invalid email format");
  * Legacy support:
  * - tier: "basic" | "advanced" | "elite" (mapped to planCode server-side)
  */
+// Seat data structure for team subscriptions
+export const seatDataSchema = z.object({
+  tier: subscriptionTierSchema.refine((val) => val !== "free", {
+    message: "Free tier is not available for team seats",
+  }),
+  email: z.string().email().optional().or(z.literal("")),
+  name: z.string().optional(),
+});
+
 export const stripeCheckoutRequestSchema = z.object({
   // New fields (preferred)
   planCode: z.enum(["essentials", "professional", "executive"]).optional(),
@@ -52,6 +61,12 @@ export const stripeCheckoutRequestSchema = z.object({
   // Legacy fields (for backward compatibility)
   tier: subscriptionTierSchema.optional(),
   billingCycle: z.enum(["monthly", "yearly"]).optional(),
+
+  // Seat count for multi-seat subscriptions
+  seatCount: z.number().int().min(1).max(100).optional(),
+
+  // Seat data with emails (for team subscriptions)
+  seats: z.array(seatDataSchema).optional(),
 
   userId: uuidSchema.optional(), // Optional because we'll get it from auth
 });

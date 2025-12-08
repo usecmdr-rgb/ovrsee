@@ -7,10 +7,16 @@ import { Button } from "@/components/ui/button";
 import Modal from "@/components/ui/Modal";
 import { formatPrice } from "@/lib/currency";
 import { useAppState } from "@/context/AppStateContext";
+import { useSupabase } from "@/components/SupabaseProvider";
 import { TIERS, type TierId, type PricingBreakdown } from "@/lib/pricing";
 import type { SeatSelection } from "@/lib/pricing";
 import { runGuardrailChecks, deriveFeatureUsage, detectFeatureUsage, type GuardrailContext } from "@/lib/subscription/guardrails";
 
+/**
+ * Seat model for existing workspace seats
+ * This represents seats that have already been created/activated
+ * For configuring new seats before checkout, see app/pricing/team/page.tsx SeatRow interface
+ */
 interface Seat {
   id: string;
   email: string;
@@ -30,7 +36,8 @@ interface Invite {
 }
 
 export default function TeamSeatsSection() {
-  const { language } = useAppState();
+  const { language, isAuthenticated } = useAppState();
+  const { supabase } = useSupabase();
   const [seats, setSeats] = useState<Seat[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null);
@@ -57,16 +64,32 @@ export default function TeamSeatsSection() {
   } | null>(null);
 
   useEffect(() => {
+    // Only fetch if authenticated
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    
     fetchSeats();
     fetchInvites();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const fetchSeats = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch("/api/team/seats");
+      
+      if (response.status === 401) {
+        // Not authenticated, don't retry
+        setLoading(false);
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.ok) {
@@ -76,6 +99,11 @@ export default function TeamSeatsSection() {
         setError(result.error || "Failed to fetch seats");
       }
     } catch (err: any) {
+      // Don't show error for auth failures
+      if (err.message?.includes("401") || err.message?.includes("Unauthorized")) {
+        setLoading(false);
+        return;
+      }
       setError(err.message || "Failed to fetch seats");
     } finally {
       setLoading(false);
@@ -83,16 +111,26 @@ export default function TeamSeatsSection() {
   };
 
   const fetchInvites = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       const response = await fetch("/api/team/invites");
+      
+      if (response.status === 401) {
+        // Not authenticated, don't retry
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.ok) {
         setInvites(result.data || []);
       }
     } catch (err) {
-      // Silently fail for invites
-      console.error("Failed to fetch invites:", err);
+      // Silently fail for invites - don't log 401 errors
+      if (!(err as any)?.message?.includes("401") && !(err as any)?.message?.includes("Unauthorized")) {
+        console.error("Failed to fetch invites:", err);
+      }
     }
   };
 

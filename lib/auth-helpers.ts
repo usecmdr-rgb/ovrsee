@@ -119,36 +119,18 @@ export async function getAuthenticatedSupabaseFromRequest(
     );
   }
 
-  let response = NextResponse.next();
-
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get(name: string) {
         return request.cookies.get(name)?.value;
       },
-      set(name: string, value: string, options: any) {
-        request.cookies.set({
-          name,
-          value,
-          ...options,
-        });
-        response.cookies.set({
-          name,
-          value,
-          ...options,
-        });
+      // For authenticated reads we don't need to modify cookies.
+      // Implement set/remove as no-ops to satisfy the interface.
+      set() {
+        // no-op
       },
-      remove(name: string, options: any) {
-        request.cookies.set({
-          name,
-          value: "",
-          ...options,
-        });
-        response.cookies.set({
-          name,
-          value: "",
-          ...options,
-        });
+      remove() {
+        // no-op
       },
     },
   });
@@ -166,7 +148,8 @@ export async function getAuthenticatedSupabaseFromRequest(
   return {
     supabaseClient: supabase,
     user,
-    responseHeaders: response.headers,
+    // No cookie mutations are performed here, so we can return empty headers.
+    responseHeaders: new Headers(),
   };
 }
 
@@ -183,6 +166,18 @@ export async function getAuthenticatedUserFromRequest(
     console.error("Error getting authenticated user from request:", error);
     return null;
   }
+}
+
+/**
+ * Lightweight helper to get the current authenticated user's ID
+ * from cookies in a server context (App Router route handlers, etc.).
+ *
+ * This mirrors the getUserIdFromRequest helper described in docs while
+ * reusing our existing Supabase auth helpers.
+ */
+export async function getUserIdFromRequest(): Promise<string | null> {
+  const user = await getAuthenticatedUser();
+  return user?.id ?? null;
 }
 
 /**

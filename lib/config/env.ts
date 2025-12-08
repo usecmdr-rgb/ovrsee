@@ -178,11 +178,28 @@ export const isStripeConfigured = !!env.STRIPE_SECRET_KEY;
 /**
  * Google OAuth configuration for Sync
  * Uses unified GOOGLE_* vars, falls back to legacy GMAIL_* vars for backward compatibility
+ * 
+ * Redirect URL is auto-constructed if not explicitly set:
+ * - Dev: http://localhost:3000/api/sync/google/callback
+ * - Prod: https://ovrsee.ai/api/sync/google/callback
  */
 export const googleConfig = {
   clientId: env.GOOGLE_CLIENT_ID || env.GMAIL_CLIENT_ID || "",
   clientSecret: env.GOOGLE_CLIENT_SECRET || env.GMAIL_CLIENT_SECRET || "",
-  redirectUrl: env.GOOGLE_OAUTH_REDIRECT_URL || env.GMAIL_REDIRECT_URI || "",
+  get redirectUrl(): string {
+    // If explicitly set, use it
+    if (env.GOOGLE_OAUTH_REDIRECT_URL) {
+      return env.GOOGLE_OAUTH_REDIRECT_URL;
+    }
+    // Legacy fallback
+    if (env.GMAIL_REDIRECT_URI) {
+      return env.GMAIL_REDIRECT_URI;
+    }
+    // Auto-construct based on environment
+    const isProduction = env.NODE_ENV === "production";
+    const baseUrl = env.NEXT_PUBLIC_APP_URL || (isProduction ? "https://ovrsee.ai" : "http://localhost:3000");
+    return `${baseUrl}/api/sync/google/callback`;
+  },
 };
 
 export const isGoogleConfigured = !!(

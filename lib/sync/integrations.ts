@@ -5,14 +5,49 @@
 
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 
+/**
+ * Google OAuth Integration object shape
+ * 
+ * Stored in public.integrations table with:
+ * - provider: "gmail" | "google_calendar"
+ * - integration_type: "oauth"
+ * - access_token: string (encrypted at rest by Supabase)
+ * - refresh_token: string | null (encrypted at rest by Supabase)
+ * - token_expires_at: timestamp | null
+ * - scopes: string[] (array of granted OAuth scopes)
+ * - metadata: { email: string } (user's Google email)
+ * - sync_status: "connected" | "error" | "disconnected"
+ * - is_active: boolean (only one active integration per workspace/provider)
+ */
+export interface GoogleIntegration {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  provider: "gmail" | "google_calendar";
+  integration_type: "oauth";
+  access_token: string;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  scopes: string[];
+  metadata: {
+    email: string;
+  };
+  sync_status: "connected" | "error" | "disconnected";
+  is_active: boolean;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UpsertGoogleIntegrationParams {
   workspaceId: string;
   userId: string;
   email: string;
   accessToken: string;
-  refreshToken: string;
+  refreshToken: string | null; // null if not provided (preserve existing)
   expiresAt: Date | null;
   scopes: string[];
+  preserveRefreshToken?: boolean; // If true, preserve existing refresh token if new one is null
 }
 
 /**
@@ -39,6 +74,22 @@ export async function upsertGoogleIntegration(
 
   // Upsert Gmail integration if scope is present
   if (hasGmailScope) {
+    // Get existing integration to preserve refresh token if new one is null
+    const { data: existingIntegration } = await supabase
+      .from("integrations")
+      .select("refresh_token")
+      .eq("workspace_id", params.workspaceId)
+      .eq("provider", "gmail")
+      .eq("integration_type", "oauth")
+      .eq("is_active", true)
+      .single();
+
+    // Preserve existing refresh token if new one is not provided and preserveRefreshToken is true
+    const refreshTokenToStore = 
+      params.refreshToken || 
+      (params.preserveRefreshToken && existingIntegration?.refresh_token) || 
+      null;
+
     // First, deactivate any existing active integration for this workspace/provider
     await supabase
       .from("integrations")
@@ -57,7 +108,7 @@ export async function upsertGoogleIntegration(
         provider: "gmail",
         integration_type: "oauth",
         access_token: params.accessToken,
-        refresh_token: params.refreshToken,
+        refresh_token: refreshTokenToStore,
         token_expires_at: params.expiresAt?.toISOString() || null,
         scopes: params.scopes.filter((s) => s.includes("gmail")),
         is_active: true,
@@ -81,6 +132,22 @@ export async function upsertGoogleIntegration(
 
   // Upsert Calendar integration if scope is present
   if (hasCalendarScope) {
+    // Get existing integration to preserve refresh token if new one is null
+    const { data: existingIntegration } = await supabase
+      .from("integrations")
+      .select("refresh_token")
+      .eq("workspace_id", params.workspaceId)
+      .eq("provider", "google_calendar")
+      .eq("integration_type", "oauth")
+      .eq("is_active", true)
+      .single();
+
+    // Preserve existing refresh token if new one is not provided and preserveRefreshToken is true
+    const refreshTokenToStore = 
+      params.refreshToken || 
+      (params.preserveRefreshToken && existingIntegration?.refresh_token) || 
+      null;
+
     // First, deactivate any existing active integration for this workspace/provider
     await supabase
       .from("integrations")
@@ -99,7 +166,7 @@ export async function upsertGoogleIntegration(
         provider: "google_calendar",
         integration_type: "oauth",
         access_token: params.accessToken,
-        refresh_token: params.refreshToken,
+        refresh_token: refreshTokenToStore,
         token_expires_at: params.expiresAt?.toISOString() || null,
         scopes: params.scopes.filter((s) => s.includes("calendar")),
         is_active: true,

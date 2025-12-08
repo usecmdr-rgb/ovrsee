@@ -36,11 +36,45 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServerClient();
 
     // Get user profile with subscription info
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id, trial_ends_at, has_used_trial")
       .eq("id", userId)
       .single();
+
+    // If profile doesn't exist, try to create it (user might have been created before trigger was applied)
+    if (profileError && profileError.code === 'PGRST116') {
+      console.warn("Profile missing for user, attempting to create:", userId);
+      
+      // Get user email from auth.users
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+      
+      if (authUser?.user?.email) {
+        // Create minimal profile
+        const { data: newProfile, error: createError } = await supabase
+          .from("profiles")
+          .insert({
+            id: userId,
+            email: authUser.user.email,
+            full_name: authUser.user.user_metadata?.full_name || null,
+          })
+          .select("subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id, trial_ends_at")
+          .single();
+        
+        // Add has_used_trial if column exists (for compatibility)
+        if (newProfile) {
+          (newProfile as any).has_used_trial = false;
+        }
+        
+        if (!createError && newProfile) {
+          console.log("Created missing profile for user:", userId);
+          profile = newProfile;
+          profileError = null;
+        } else {
+          console.error("Failed to create profile:", createError);
+        }
+      }
+    }
 
     const buildDefaultResponse = async () => {
       const hasUsedTrialFallback = userEmail ? await hasEmailUsedTrial(userEmail) : false;

@@ -7,9 +7,12 @@
  * 
  * - Supabase Google login: Uses Supabase's OAuth client
  * - Gmail OAuth: Uses GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET from Google Cloud Console
+ * 
+ * Now uses integrations table instead of gmail_connections
  */
 
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { getOrCreateWorkspace, getWorkspaceIntegration } from "@/lib/sync/integrations";
 
 export interface GmailMessage {
   id: string;
@@ -62,42 +65,44 @@ export interface GmailHistoryResponse {
 
 /**
  * Get valid access token, refreshing if necessary
+ * Now uses integrations table instead of gmail_connections
  */
 export async function getGmailAccessToken(userId: string): Promise<string> {
   const supabase = getSupabaseServerClient();
   
-  const { data: connection, error } = await supabase
-    .from("gmail_connections")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  // Get or create workspace
+  const workspace = await getOrCreateWorkspace(userId);
 
-  if (error || !connection) {
+  // Get Gmail integration
+  const integration = await getWorkspaceIntegration(workspace.id, "gmail");
+
+  if (!integration || !integration.is_active || !integration.access_token) {
     throw new Error("Gmail not connected");
   }
 
   // Check if token is expired or expires soon (within 5 minutes)
-  const expiresAt = connection.expires_at ? new Date(connection.expires_at) : null;
+  const expiresAt = integration.token_expires_at ? new Date(integration.token_expires_at) : null;
   const now = new Date();
   const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
 
   if (expiresAt && expiresAt <= fiveMinutesFromNow) {
     // Token expired or expiring soon, refresh it
-    if (!connection.refresh_token) {
+    if (!integration.refresh_token) {
       throw new Error("Refresh token missing - please reconnect Gmail");
     }
 
-    const newToken = await refreshGmailToken(connection.refresh_token, userId);
+    const newToken = await refreshGmailToken(integration.refresh_token, userId, integration.id);
     return newToken;
   }
 
-  return connection.access_token;
+  return integration.access_token;
 }
 
 /**
  * Refresh Gmail access token
+ * Now uses integrations table instead of gmail_connections
  */
-async function refreshGmailToken(refreshToken: string, userId: string): Promise<string> {
+async function refreshGmailToken(refreshToken: string, userId: string, integrationId: string): Promise<string> {
   const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
   const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 
@@ -139,18 +144,18 @@ async function refreshGmailToken(refreshToken: string, userId: string): Promise<
   const data = await response.json();
   const { access_token, expires_in } = data;
 
-  // Update stored token
+  // Update stored token in integrations table
   const supabase = getSupabaseServerClient();
   const expiresAt = new Date(Date.now() + (expires_in * 1000)).toISOString();
 
   await supabase
-    .from("gmail_connections")
+    .from("integrations")
     .update({
-      access_token,
-      expires_at: expiresAt,
+      access_token: access_token,
+      token_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     })
-    .eq("user_id", userId);
+    .eq("id", integrationId);
 
   return access_token;
 }

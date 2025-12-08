@@ -67,3 +67,4 @@ COMMENT ON COLUMN public.insight_events.source IS 'Source of the insight: insigh
 
 
 
+

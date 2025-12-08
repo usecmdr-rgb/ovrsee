@@ -5,6 +5,8 @@ import { Receipt, Info, Loader2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatPrice } from "@/lib/currency";
 import { useAppState } from "@/context/AppStateContext";
+import { useSupabase } from "@/components/SupabaseProvider";
+import { getTaxDisclaimer } from "@/lib/tax";
 
 interface BillingPreview {
   amountDue: number;
@@ -18,30 +20,49 @@ interface BillingPreview {
 }
 
 export default function BillingPreview() {
-  const { language } = useAppState();
+  const { language, isAuthenticated } = useAppState();
+  const { supabase } = useSupabase();
   const [preview, setPreview] = useState<BillingPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Only fetch if authenticated
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    
     fetchPreview();
 
     // Listen for refresh events
     const handleRefresh = () => {
-      fetchPreview();
+      if (isAuthenticated) {
+        fetchPreview();
+      }
     };
     window.addEventListener("billing-preview-refresh", handleRefresh);
     return () => {
       window.removeEventListener("billing-preview-refresh", handleRefresh);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const fetchPreview = async () => {
+    if (!isAuthenticated) return;
+    
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch("/api/billing/preview");
+      
+      if (response.status === 401) {
+        // Not authenticated, don't retry
+        setLoading(false);
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.ok) {
@@ -50,6 +71,11 @@ export default function BillingPreview() {
         setError(result.error || "Failed to fetch billing preview");
       }
     } catch (err: any) {
+      // Don't show error for auth failures
+      if (err.message?.includes("401") || err.message?.includes("Unauthorized")) {
+        setLoading(false);
+        return;
+      }
       setError(err.message || "Failed to fetch billing preview");
     } finally {
       setLoading(false);
@@ -135,6 +161,9 @@ export default function BillingPreview() {
               {formatPrice(preview.amountDue / 100, language)}
             </span>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            {getTaxDisclaimer()}
+          </p>
         </div>
       </CardContent>
     </Card>

@@ -30,3 +30,4 @@ You can use tools like:
 For development, you can use placeholder images or the Expo default icons. The app will work with placeholder assets during development.
 
 
+

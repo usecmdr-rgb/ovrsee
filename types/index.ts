@@ -24,6 +24,7 @@ export interface AgentInfo {
 }
 
 export interface BusinessInfo {
+  fullName?: string;
   businessName: string;
   businessType: string;
   location: string;
@@ -132,7 +133,7 @@ export interface EmailQueueItem {
   queue_status: "open" | "snoozed" | "done" | "archived";
   is_read: boolean;
   is_starred: boolean;
-  category_id?: string | null;
+  category?: string | null;
   snoozed_until?: string | null;
   deleted_at?: string | null;
   deleted_by?: string | null;

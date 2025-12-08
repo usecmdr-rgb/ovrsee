@@ -82,7 +82,7 @@ export default function PricingTable() {
         id: "advanced" as TierId,
         name: "Professional",
         planCode: "professional" as CorePlanCode,
-        description: "Unlock Aloha & Studio.", // Updated plan description
+        description: "Unlock Aloha & Studio social analytics.", // Updated plan description
         hasTrial: false, // Professional has NO free trial
       },
       {

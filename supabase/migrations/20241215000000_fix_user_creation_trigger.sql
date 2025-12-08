@@ -6,13 +6,12 @@ CREATE OR REPLACE FUNCTION create_workspace_for_user()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Create profile (if it doesn't exist)
-  INSERT INTO public.profiles (id, email, full_name, subscription_tier, subscription_status)
+  -- Use minimal required fields to avoid constraint issues
+  INSERT INTO public.profiles (id, email, full_name)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
-    'free',
-    'active'
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', '')
   )
   ON CONFLICT (id) DO NOTHING;
 
@@ -34,6 +33,11 @@ BEGIN
   ON CONFLICT (workspace_id, user_id) DO NOTHING;
   
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Log error but don't fail user creation
+    RAISE WARNING 'Error in create_workspace_for_user trigger: %', SQLERRM;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

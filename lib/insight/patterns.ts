@@ -122,3 +122,4 @@ export function detectTrend(values: number[]): 'up' | 'down' | 'flat' {
 
 
 
+

@@ -10,9 +10,10 @@ import { useAppState } from "@/context/AppStateContext";
 import { formatPrice } from "@/lib/currency";
 import { TIERS } from "@/lib/pricing";
 import type { TierId } from "@/lib/pricing";
-import { useBillingInterval } from "@/components/pricing/BillingIntervalContext";
 import { useStartCheckout } from "@/components/pricing/useStartCheckout";
-import type { CorePlanCode } from "@/lib/pricingConfig";
+import type { CorePlanCode, BillingInterval } from "@/lib/pricingConfig";
+import { getPlanAmount } from "@/lib/pricingConfig";
+import { getTaxDisclaimer } from "@/lib/tax";
 
 interface PlanSeatSuggestion {
   tier: TierId;
@@ -60,7 +61,7 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
   const [needsVoice, setNeedsVoice] = useState(false);
   const [needsInsights, setNeedsInsights] = useState(false);
   const [budgetSensitivity, setBudgetSensitivity] = useState<"low" | "medium" | "high">("medium");
-  const { billingInterval } = useBillingInterval();
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
   const { startCheckout } = useStartCheckout();
 
   const handleGetRecommendation = async () => {
@@ -83,9 +84,11 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
                 needsVoice,
                 needsInsights,
                 budgetSensitivity,
+                billingInterval,
               }
             : {
                 mode: "workspace",
+                billingInterval,
               }
         ),
       });
@@ -108,12 +111,14 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
     if (onRecommendationSelect) {
       onRecommendationSelect(seats);
     } else {
-      // Navigate to pricing page with query params containing recommendation
+      // Navigate to pricing page with query params containing recommendation and billing interval
       const params = new URLSearchParams();
       seats.forEach((seat, idx) => {
         params.append(`tier_${idx}`, seat.tier);
         params.append(`count_${idx}`, seat.count.toString());
       });
+      // Include billing interval in URL params
+      params.append("billingInterval", billingInterval);
       router.push(`/pricing/team?${params.toString()}`);
     }
   };
@@ -129,10 +134,24 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
     return "essentials";
   };
 
+  // Helper to get price for a tier based on billing interval
+  const getTierPrice = (tier: TierId, interval: BillingInterval): number => {
+    const tierToPlanCode: Record<TierId, CorePlanCode> = {
+      basic: "essentials",
+      advanced: "professional",
+      elite: "executive",
+    };
+    const planCode = tierToPlanCode[tier];
+    const amount = getPlanAmount(planCode, interval);
+    return amount / 100; // Convert from cents to dollars
+  };
+
   const handleCheckoutRecommended = async (seats: PlanSeatSuggestion[]) => {
     const planCode = getRecommendedPlanCode(seats);
+    // Calculate total seat count by summing all seat counts
+    const totalSeatCount = seats.reduce((sum, seat) => sum + seat.count, 0);
     try {
-      await startCheckout(planCode, billingInterval);
+      await startCheckout(planCode, billingInterval, totalSeatCount);
     } catch (err) {
       console.error("Failed to start checkout from PlanAdvisor:", err);
     }
@@ -159,26 +178,42 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
               Recommended Configuration
             </h3>
             <div className="space-y-2 mb-4">
-              {recommendation.suggestedSeats.map((seat, idx) => (
-                <div key={idx} className="flex justify-between items-center text-sm">
-                  <span className="text-slate-600 dark:text-slate-400">
-                    {seat.count} × {TIERS[seat.tier].name}
-                  </span>
-                  <span className="font-semibold">
-                    {formatPrice(seat.count * TIERS[seat.tier].priceMonthly, language)}
-                    <span className="text-xs text-slate-500 dark:text-slate-400">/mo</span>
-                  </span>
-                </div>
-              ))}
+              {recommendation.suggestedSeats.map((seat, idx) => {
+                const unitPrice = getTierPrice(seat.tier, billingInterval);
+                const periodLabel = billingInterval === "yearly" ? "/yr" : "/mo";
+                return (
+                  <div key={idx} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      {seat.count} × {TIERS[seat.tier].name}
+                    </span>
+                    <span className="font-semibold">
+                      {formatPrice(seat.count * unitPrice, language)}
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{periodLabel}</span>
+                    </span>
+                  </div>
+                );
+              })}
               <div className="pt-2 border-t border-emerald-200 dark:border-emerald-800">
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
-                  <span>{formatPrice(recommendation.pricing.breakdown.finalTotal, language)}/mo</span>
+                  <span>
+                    {formatPrice(
+                      recommendation.suggestedSeats.reduce(
+                        (sum, seat) => sum + seat.count * getTierPrice(seat.tier, billingInterval),
+                        0
+                      ),
+                      language
+                    )}
+                    {billingInterval === "yearly" ? "/yr" : "/mo"}
+                  </span>
                 </div>
               </div>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
               {recommendation.pricing.explanation}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
+              {getTaxDisclaimer()}
             </p>
             <div className="flex justify-center gap-3">
               <Button
@@ -212,12 +247,12 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
                     <span className="text-xs text-slate-500">
                       {formatPrice(
                         option.suggestedSeats.reduce(
-                          (sum, s) => sum + s.count * TIERS[s.tier].priceMonthly,
+                          (sum, s) => sum + s.count * getTierPrice(s.tier, billingInterval),
                           0
                         ),
                         language
                       )}
-                      /mo
+                      {billingInterval === "yearly" ? "/yr" : "/mo"}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -471,6 +506,30 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
               </div>
             )}
 
+            {/* Billing Interval Toggle */}
+            <div className="flex items-center gap-3 justify-center mt-4 mb-2">
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  billingInterval === "monthly"
+                    ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                    : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+                }`}
+                onClick={() => setBillingInterval("monthly")}
+              >
+                Monthly
+              </button>
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  billingInterval === "yearly"
+                    ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                    : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+                }`}
+                onClick={() => setBillingInterval("yearly")}
+              >
+                Yearly
+              </button>
+            </div>
+
             <div className="flex justify-center items-center gap-2 mt-auto pt-1">
               <Link href="/pricing/team">
                 <Button
@@ -509,6 +568,29 @@ export default function PlanAdvisor({ mode = "anonymous", onRecommendationSelect
                 {error}
               </div>
             )}
+            {/* Billing Interval Toggle */}
+            <div className="flex items-center gap-3 justify-center mb-3">
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  billingInterval === "monthly"
+                    ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                    : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+                }`}
+                onClick={() => setBillingInterval("monthly")}
+              >
+                Monthly
+              </button>
+              <button
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  billingInterval === "yearly"
+                    ? "bg-black text-white border-black dark:bg-white dark:text-black"
+                    : "bg-white text-black border-gray-300 dark:bg-slate-800 dark:text-white dark:border-slate-700"
+                }`}
+                onClick={() => setBillingInterval("yearly")}
+              >
+                Yearly
+              </button>
+            </div>
             <Button
               onClick={handleGetRecommendation}
               disabled={loading}

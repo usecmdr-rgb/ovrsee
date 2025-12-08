@@ -282,6 +282,21 @@ export async function POST(request: NextRequest) {
           console.error("Error clearing retention on upgrade:", clearError);
         }
 
+        // TODO: After workspace subscription is active, create invites for each seat with a non-empty email
+        // This should:
+        // 1. Parse seatEmails from session.metadata.seatEmails (JSON string)
+        // 2. For each seat with an email:
+        //    - Create a record in workspace_seat_invites table
+        //    - Generate an activation token/URL
+        //    - Send activation email from support@ovrsee.ai
+        // 3. Store seat configuration (tier, email, name) for later use
+        // Example structure:
+        //   const seatEmails = session.metadata?.seatEmails ? JSON.parse(session.metadata.seatEmails) : [];
+        //   for (const seat of seatEmails) {
+        //     await createSeatInvite(workspaceId, seat.email, seat.tier, seat.name);
+        //     await sendActivationEmail(seat.email, activationUrl);
+        //   }
+
         // Also update profiles table for backward compatibility
         // The trigger should handle this, but we do it explicitly for safety
         // IMPORTANT: Set trial_started_at when subscription starts (for metrics filtering)

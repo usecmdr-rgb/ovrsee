@@ -28,3 +28,4 @@ COMMENT ON COLUMN aloha_profiles.voice_key IS 'Selected voice profile key (one o
 
 
 
+

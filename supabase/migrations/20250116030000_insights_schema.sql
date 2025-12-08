@@ -121,3 +121,4 @@ COMMENT ON COLUMN public.insights_daily_metrics.emails_important_total IS 'Count
 
 
 
+

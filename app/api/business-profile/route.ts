@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
     // Prepare profile data
     const profileData: any = {
       user_id: user.id,
+      full_name: body.fullName || null,
       business_name: body.businessName || null,
       business_type: body.businessType || null,
       description: body.description || null,
@@ -71,14 +72,6 @@ export async function POST(request: NextRequest) {
       timezone: body.timezone || "EST",
       notes: body.notes || null,
     };
-
-    // Handle watermark settings
-    if (body.watermarkSettings) {
-      profileData.image_watermark_enabled = body.watermarkSettings.enabled || false;
-      profileData.image_watermark_text = body.watermarkSettings.text || null;
-      profileData.image_watermark_logo_url = body.watermarkSettings.logoUrl || null;
-      profileData.image_watermark_position = body.watermarkSettings.position || null;
-    }
 
     // Check if profile exists
     const { data: existingProfile } = await supabase
@@ -105,6 +98,8 @@ export async function POST(request: NextRequest) {
         .eq("id", profileId);
 
       if (updateError) {
+        console.error("[Business Profile] Update error:", updateError);
+        console.error("[Business Profile] Profile data:", JSON.stringify(profileData, null, 2));
         throw updateError;
       }
     } else {
@@ -116,6 +111,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (insertError) {
+        console.error("[Business Profile] Insert error:", insertError);
         throw insertError;
       }
 

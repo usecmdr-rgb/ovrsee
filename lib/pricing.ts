@@ -69,21 +69,29 @@ export function getTeamDiscountPercent(totalSeats: number): number {
  * Calculate team pricing breakdown
  *
  * @param seats Array of seat selections with tier and count
- * @param billingInterval Billing interval for team pricing (currently only monthly is implemented)
+ * @param billingInterval Billing interval for team pricing (monthly or yearly)
  * @returns Complete pricing breakdown including discounts
  */
 export function calculateTeamPricing(
   seats: SeatSelection[],
   billingInterval: 'monthly' | 'yearly' = 'monthly'
 ): PricingBreakdown {
+  // Import pricing config for accurate yearly prices
+  // We'll use a helper to get the correct price
+  const getUnitPrice = (tier: TierId): number => {
+    if (billingInterval === 'yearly') {
+      // Yearly pricing = 11 × monthly (1 month free)
+      // This matches the pricingConfig where yearly = 11 × monthly
+      return TIERS[tier].priceMonthly * 11;
+    }
+    return TIERS[tier].priceMonthly;
+  };
+
   // Initialize per-tier tracking
   const perTier: PricingBreakdown['perTier'] = {
-    // TODO: when enabling yearly team billing, switch unitPrice to a yearly per-seat
-    // amount (11 × monthly) when billingInterval === "yearly". For now we always
-    // use monthly pricing so behavior matches existing production.
-    basic: { count: 0, unitPrice: TIERS.basic.priceMonthly, subtotal: 0 },
-    advanced: { count: 0, unitPrice: TIERS.advanced.priceMonthly, subtotal: 0 },
-    elite: { count: 0, unitPrice: TIERS.elite.priceMonthly, subtotal: 0 },
+    basic: { count: 0, unitPrice: getUnitPrice('basic'), subtotal: 0 },
+    advanced: { count: 0, unitPrice: getUnitPrice('advanced'), subtotal: 0 },
+    elite: { count: 0, unitPrice: getUnitPrice('elite'), subtotal: 0 },
   };
 
   // Aggregate seats by tier

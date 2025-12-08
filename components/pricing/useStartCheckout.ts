@@ -8,7 +8,7 @@ export function useStartCheckout() {
   const { supabase } = useSupabase();
   const { isAuthenticated, openAuthModal } = useAppState();
 
-  const startCheckout = async (planCode: CorePlanCode, billingInterval: BillingInterval) => {
+  const startCheckout = async (planCode: CorePlanCode, billingInterval: BillingInterval, seatCount?: number) => {
     if (!isAuthenticated) {
       openAuthModal("signup");
       return;
@@ -31,6 +31,7 @@ export function useStartCheckout() {
       body: JSON.stringify({
         planCode,
         billingInterval,
+        ...(seatCount && seatCount > 0 ? { seatCount } : {}),
       }),
     });
 

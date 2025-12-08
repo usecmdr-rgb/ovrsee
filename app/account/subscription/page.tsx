@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Calendar, Check, X, AlertCircle, Loader2 } from "lucide-react";
+import { CreditCard, Calendar, Check, X, AlertCircle, Loader2, Users } from "lucide-react";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { useAppState } from "@/context/AppStateContext";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -39,7 +39,6 @@ export default function SubscriptionPage() {
   const [error, setError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [upgrading, setUpgrading] = useState<string | null>(null);
 
   const fetchSubscriptionData = useCallback(async () => {
     try {
@@ -56,14 +55,42 @@ export default function SubscriptionPage() {
         return;
       }
 
-      const response = await fetch(`/api/subscription?userId=${session.user.id}`);
-      const data = await response.json();
+      // Only fetch from database - no Stripe calls
+      const { data: subscriptionFromDb } = await supabase
+        .from("subscriptions")
+        .select("tier, status, current_period_end, cancel_at_period_end, trial_end")
+        .eq("user_id", session.user.id)
+        .single();
 
-      if (!response.ok) {
-        throw new Error(data.error || t("loadingSubscriptionDetails"));
+      // Check if user is workspace owner and get team member count
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("owner_user_id", session.user.id)
+        .single();
+
+      let teamMemberCount = 0;
+      if (workspace) {
+        const { count } = await supabase
+          .from("workspace_seats")
+          .select("*", { count: "exact", head: true })
+          .eq("workspace_id", workspace.id)
+          .in("status", ["active", "pending"]);
+        teamMemberCount = count || 0;
       }
 
-      setSubscriptionData(data);
+      // Build subscription data without Stripe calls
+      setSubscriptionData({
+        subscription: {
+          tier: subscriptionFromDb?.tier || null,
+          status: subscriptionFromDb?.status || null,
+          currentPeriodEnd: subscriptionFromDb?.current_period_end || null,
+          cancelAtPeriodEnd: subscriptionFromDb?.cancel_at_period_end || false,
+          trialEnd: subscriptionFromDb?.trial_end || null,
+        },
+        paymentMethod: null, // Don't fetch payment method unless user wants to update
+        teamMemberCount, // Add team member count
+      });
     } catch (err: any) {
       setError(err.message || t("pleaseTryAgain"));
     } finally {
@@ -79,44 +106,7 @@ export default function SubscriptionPage() {
     fetchSubscriptionData();
   }, [isAuthenticated, fetchSubscriptionData, openAuthModal]);
 
-  const handleUpgradeDowngrade = async (tier: TierId) => {
-    try {
-      setUpgrading(tier);
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.user) {
-        openAuthModal("login");
-        return;
-      }
-
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tier,
-          userId: session.user.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || t("pleaseTryAgain"));
-      }
-
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (err: any) {
-      alert(err.message || t("pleaseTryAgain"));
-      setUpgrading(null);
-    }
-  };
+  // Removed handleUpgradeDowngrade - users should use "Update Subscription" button to change plans
 
   const handleCancelSubscription = async () => {
     try {
@@ -230,14 +220,6 @@ export default function SubscriptionPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-semibold">{t("subscriptionBilling")}</h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          {t("manageSubscriptionPlan")}
-        </p>
-      </div>
-
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
           <div className="flex items-center gap-2">
@@ -253,14 +235,10 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* Current Plan Section */}
+      {/* Minimal Subscription Info */}
       {subscriptionData && (
         <Card>
-          <CardHeader>
-            <CardTitle>{t("currentPlan")}</CardTitle>
-            <CardDescription>{t("activeSubscriptionDetails")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="pt-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-xl font-semibold">{getTierDisplayName(currentTier)}</h3>
@@ -270,174 +248,45 @@ export default function SubscriptionPage() {
                     {subscriptionData.subscription.status || t("inactive")}
                   </span>
                 </p>
-                {subscriptionData.subscription.currentPeriodEnd && (
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {t("renewsOn")} {formatDate(subscriptionData.subscription.currentPeriodEnd)}
-                  </p>
-                )}
-                {subscriptionData.subscription.cancelAtPeriodEnd && (
-                  <p className="mt-2 text-sm font-medium text-amber-600 dark:text-amber-400">
-                    {t("subscriptionWillCancel")}
-                  </p>
-                )}
-                {subscriptionData.subscription.trialEnd && (
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {t("trialEnds")} {formatDate(subscriptionData.subscription.trialEnd)}
-                  </p>
+                
+                {/* Team Members Info */}
+                {(subscriptionData as any)?.teamMemberCount !== undefined && (subscriptionData as any).teamMemberCount > 0 && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-slate-400" />
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {(subscriptionData as any).teamMemberCount} {(subscriptionData as any).teamMemberCount === 1 ? "team member" : "team members"}
+                    </p>
+                  </div>
                 )}
               </div>
-              {currentTier && (
-                <div className="text-right">
-                  <p className="text-2xl font-semibold">
-                    {formatPrice(BASE_PRICES[currentTier], language)}
-                  </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{t("perMonth")}</p>
+
+              {/* Action Buttons - Only show when subscription is active */}
+              {currentTier && subscriptionData.subscription.status === "active" && (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    onClick={handleManageBilling}
+                    variant="secondary"
+                    className="text-sm"
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    {t("updateSubscription") || "Update Subscription"}
+                  </Button>
+                  <Button
+                    onClick={() => setShowCancelModal(true)}
+                    variant="secondary"
+                    className="text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950"
+                  >
+                    {t("cancelSubscription")}
+                  </Button>
                 </div>
               )}
             </div>
-
-            {/* Payment Method */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CreditCard className="h-5 w-5 text-slate-400" />
-                  <div>
-                    {subscriptionData.paymentMethod ? (
-                      <>
-                        <p className="text-sm font-medium">
-                          {formatCardBrand(subscriptionData.paymentMethod.brand)} ••••{" "}
-                          {subscriptionData.paymentMethod.last4}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {t("subscriptionExpires")} {subscriptionData.paymentMethod.expMonth}/
-                          {subscriptionData.paymentMethod.expYear}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium">{t("noPaymentMethod")}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {t("addPaymentMethodToContinue")}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <Button
-                  onClick={handleManageBilling}
-                  variant="secondary"
-                  className="text-sm"
-                >
-                  {subscriptionData.paymentMethod ? t("update") : t("addPaymentMethod")}
-                </Button>
-              </div>
-            </div>
-
-            {/* Cancel Subscription Button */}
-            {currentTier && subscriptionData.subscription.status === "active" && (
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                <Button
-                  onClick={() => setShowCancelModal(true)}
-                  variant="secondary"
-                  className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950"
-                >
-                  {t("cancelSubscription")}
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
-      {/* Plan Advisor */}
-      <PlanAdvisor mode="workspace" />
-
       {/* Team & Seats Section */}
       <TeamSeatsSection />
-
-      {/* Billing Preview */}
-      <BillingPreview />
-
-      {/* Available Plans */}
-      <div>
-        <h2 className="mb-6 text-2xl font-semibold">{t("availablePlans")}</h2>
-        <div className="grid gap-6 md:grid-cols-3">
-          {(["basic", "advanced", "elite"] as TierId[]).map((tier) => {
-            const isCurrent = isCurrentTier(tier);
-            const isUpgrading = upgrading === tier;
-            const syncAgent = agents.find((a) => a.key === "sync");
-            const alohaAgent = agents.find((a) => a.key === "aloha");
-            const studioAgent = agents.find((a) => a.key === "studio");
-            const insightAgent = agents.find((a) => a.key === "insight");
-
-            let description = "";
-            if (tier === "basic") {
-              description = `${t("startWith")} ${syncAgent?.name || t("agentSync")}.`;
-            } else if (tier === "advanced") {
-              description = `${t("unlock")} ${alohaAgent?.name || t("agentAloha")} & ${studioAgent?.name || t("agentStudio")}.`;
-            } else {
-              description = `${t("everythingPlus")} ${insightAgent?.name || t("agentInsight")}.`;
-            }
-
-            return (
-              <Card
-                key={tier}
-                className={`relative flex flex-col ${
-                  isCurrent
-                    ? "ring-2 ring-slate-900 dark:ring-white"
-                    : "hover:shadow-lg transition-shadow"
-                }`}
-              >
-                {isCurrent && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-900">
-                      {t("currentPlanBadge")}
-                    </span>
-                  </div>
-                )}
-                <CardHeader>
-                  <CardTitle className="text-xl">{TIER_NAMES[tier]}</CardTitle>
-                  <CardDescription>{description}</CardDescription>
-                  <div className="mt-4">
-                    <span className="text-3xl font-semibold">
-                      {formatPrice(BASE_PRICES[tier], language)}
-                    </span>
-                    <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">
-                      /month
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-col flex-1 space-y-4">
-                  <ul className="space-y-2 flex-1">
-                    {TIER_FEATURES[tier].map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    onClick={() => handleUpgradeDowngrade(tier)}
-                    disabled={isCurrent || isUpgrading}
-                    className="w-full mt-auto"
-                    variant={isCurrent ? "secondary" : "default"}
-                  >
-                    {isUpgrading
-                      ? t("processing")
-                      : isCurrent
-                        ? t("currentPlanBadge")
-                        : currentTier && BASE_PRICES[tier] > BASE_PRICES[currentTier as TierId]
-                          ? t("upgrade")
-                          : currentTier && BASE_PRICES[tier] < BASE_PRICES[currentTier as TierId]
-                            ? t("downgrade")
-                            : t("selectPlan")}
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Cancel Confirmation Modal */}
       <Modal

@@ -34,10 +34,12 @@ interface AnonymousRequest {
   needsVoice: boolean;
   needsInsights: boolean;
   budgetSensitivity: "low" | "medium" | "high";
+  billingInterval?: "monthly" | "yearly"; // Optional: billing interval, defaults to monthly
 }
 
 interface WorkspaceRequest {
   mode: "workspace";
+  billingInterval?: "monthly" | "yearly"; // Optional: billing interval, defaults to monthly
 }
 
 type RecommendRequest = AnonymousRequest | WorkspaceRequest;
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (body.mode === "anonymous") {
       return handleAnonymousRecommendation(body);
     } else if (body.mode === "workspace") {
-      return handleWorkspaceRecommendation();
+      return handleWorkspaceRecommendation(body.billingInterval || "monthly");
     } else {
       return NextResponse.json(
         { error: "Invalid mode. Must be 'anonymous' or 'workspace'" },
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
 
 async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<NextResponse> {
   // Extract all parameters including mediaVolume and analyticsVolume for updated recommendation logic
-  const { teamSize, callVolume, emailVolume, mediaVolume, analyticsVolume, needsVoice, needsInsights, budgetSensitivity } = req;
+  const { teamSize, callVolume, emailVolume, mediaVolume, analyticsVolume, needsVoice, needsInsights, budgetSensitivity, billingInterval = "monthly" } = req;
 
   // Recommendation logic
   let suggestedSeats: PlanSeatSuggestion[] = [];
@@ -192,12 +194,12 @@ async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<Nex
     }
   }
 
-  // Calculate pricing
-  const pricingBreakdown = calculateTeamPricing(suggestedSeats);
+  // Calculate pricing with billing interval
+  const pricingBreakdown = calculateTeamPricing(suggestedSeats, billingInterval);
   const pricingExplanation = describeTeamPricing(pricingBreakdown);
 
   // Generate alternative options
-  const altOptions = generateAlternativeOptions(teamSize, needsVoice, needsInsights, suggestedSeats);
+  const altOptions = generateAlternativeOptions(teamSize, needsVoice, needsInsights, suggestedSeats, undefined, billingInterval);
 
   return NextResponse.json({
     ok: true,
@@ -211,7 +213,7 @@ async function handleAnonymousRecommendation(req: AnonymousRequest): Promise<Nex
   });
 }
 
-async function handleWorkspaceRecommendation(): Promise<NextResponse> {
+async function handleWorkspaceRecommendation(billingInterval: "monthly" | "yearly" = "monthly"): Promise<NextResponse> {
   const supabase = getSupabaseServerClient();
 
   // Get authenticated user
@@ -343,7 +345,7 @@ async function handleWorkspaceRecommendation(): Promise<NextResponse> {
   }
 
   // Calculate pricing for suggested seats
-  const pricingBreakdown = calculateTeamPricing(suggestedSeats);
+  const pricingBreakdown = calculateTeamPricing(suggestedSeats, billingInterval);
   const pricingExplanation = describeTeamPricing(pricingBreakdown);
 
   // Calculate current pricing for comparison
@@ -352,7 +354,7 @@ async function handleWorkspaceRecommendation(): Promise<NextResponse> {
     { tier: "advanced" as TierId, count: currentSeatCounts.advanced },
     { tier: "elite" as TierId, count: currentSeatCounts.elite },
   ].filter((s) => s.count > 0);
-  const currentPricing = calculateTeamPricing(currentSeats);
+  const currentPricing = calculateTeamPricing(currentSeats, billingInterval);
 
   // Generate alternative options
   const altOptions = generateAlternativeOptions(
@@ -360,7 +362,8 @@ async function handleWorkspaceRecommendation(): Promise<NextResponse> {
     needsVoice,
     needsInsights,
     suggestedSeats,
-    currentSeats
+    currentSeats,
+    billingInterval
   );
 
   return NextResponse.json({
@@ -384,19 +387,20 @@ function generateAlternativeOptions(
   needsVoice: boolean,
   needsInsights: boolean,
   primarySuggestion: PlanSeatSuggestion[],
-  currentSeats?: SeatSelection[]
+  currentSeats?: SeatSelection[],
+  billingInterval: "monthly" | "yearly" = "monthly"
 ): PlanRecommendationResponse["altOptions"] {
   const options: PlanRecommendationResponse["altOptions"] = [];
 
   const primaryTotal = primarySuggestion.reduce((sum, s) => sum + s.count, 0);
-  const primaryPrice = calculateTeamPricing(primarySuggestion).finalTotal;
+  const primaryPrice = calculateTeamPricing(primarySuggestion, billingInterval).finalTotal;
 
   // Cheaper option
   if (primarySuggestion.some((s) => s.tier === "elite" || s.tier === "advanced")) {
     const cheaperSeats: PlanSeatSuggestion[] = [
       { tier: "basic" as TierId, count: Math.max(1, Math.floor(primaryTotal * 0.8)) },
     ];
-    const cheaperPrice = calculateTeamPricing(cheaperSeats).finalTotal;
+    const cheaperPrice = calculateTeamPricing(cheaperSeats, billingInterval).finalTotal;
     
     if (cheaperPrice < primaryPrice * 0.9) {
       options.push({
@@ -422,7 +426,7 @@ function generateAlternativeOptions(
       { tier: "elite" as TierId, count: Math.max(1, Math.ceil(primaryTotal * 0.5)) },
       { tier: "advanced" as TierId, count: Math.max(0, Math.floor(primaryTotal * 0.5)) },
     ].filter((s) => s.count > 0);
-    const premiumPrice = calculateTeamPricing(premiumSeats).finalTotal;
+    const premiumPrice = calculateTeamPricing(premiumSeats, billingInterval).finalTotal;
     
     if (premiumPrice > primaryPrice * 1.1) {
       options.push({

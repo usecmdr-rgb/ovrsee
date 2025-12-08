@@ -19,6 +19,7 @@ import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 export type BusinessContext = {
   profile: {
+    fullName?: string | null;
     businessName: string | null;
     website: string | null;
     industry?: string | null;
@@ -29,6 +30,7 @@ export type BusinessContext = {
     contactEmail?: string | null;
     contactPhone?: string | null;
     serviceArea?: string | null;
+    serviceName?: string | null;
     watermarkSettings?: {
       enabled: boolean;
       text?: string | null;
@@ -152,6 +154,7 @@ export async function getBusinessContext(
 
   return {
     profile: {
+      fullName: profile.full_name,
       businessName: profile.business_name,
       website: profile.primary_website_url,
       industry: profile.business_type,
@@ -162,6 +165,7 @@ export async function getBusinessContext(
       contactEmail: profile.contact_email,
       contactPhone: profile.contact_phone,
       serviceArea: profile.service_area,
+      serviceName: profile.service_name,
       watermarkSettings,
       preferences: profile.preferences || {},
       language: profile.language,

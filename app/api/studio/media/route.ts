@@ -131,3 +131,8 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// TODO: In a future iteration, add endpoints that use social_connections
+// (e.g. /api/studio/social/instagram/refresh, /api/studio/social/tiktok/refresh)
+// to fetch recent posts into social_media_posts and feed them into Studio
+// intelligence and analytics endpoints.

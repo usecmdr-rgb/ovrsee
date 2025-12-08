@@ -23,8 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profile = await upsertBusinessProfile({
-      userId,
+    const profile = await upsertBusinessProfile(userId, {
       business_name: business_name.trim(),
       website_url: website_url?.trim() || null,
       description: description?.trim() || null,

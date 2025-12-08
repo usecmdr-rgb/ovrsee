@@ -137,41 +137,80 @@ export async function runGmailInitialSync(job: SyncJobRow): Promise<void> {
       // Extract labels
       const labels = msg.labelIds || [];
 
-      // Upsert message
+      // Get user_id from workspace
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("owner_user_id")
+        .eq("id", job.workspace_id)
+        .single();
+
+      if (!workspace) {
+        console.error(`[Gmail Sync] Workspace ${job.workspace_id} not found`);
+        continue;
+      }
+
+      const userId = workspace.owner_user_id;
+
+      // Parse email body (extract HTML and text)
+      let bodyHtml: string | null = null;
+      let bodyText: string | null = null;
+
+      if (msg.payload?.body?.data) {
+        // Simple body extraction
+        const decoded = Buffer.from(msg.payload.body.data, "base64url").toString("utf-8");
+        bodyText = decoded;
+      }
+
+      if (msg.payload?.parts) {
+        for (const part of msg.payload.parts) {
+          if (part.mimeType === "text/html" && part.body?.data) {
+            bodyHtml = Buffer.from(part.body.data, "base64url").toString("utf-8");
+          } else if (part.mimeType === "text/plain" && part.body?.data && !bodyText) {
+            bodyText = Buffer.from(part.body.data, "base64url").toString("utf-8");
+          }
+        }
+      }
+
+      // Upsert into email_queue (canonical table)
       const { error: upsertError } = await supabase
-        .from("sync_email_messages")
+        .from("email_queue")
         .upsert(
           {
-            workspace_id: job.workspace_id,
-            integration_id: job.integration_id,
-            external_id: msg.id!,
-            thread_id: msg.threadId || null,
+            user_id: userId,
+            gmail_message_id: msg.id!,
+            gmail_thread_id: msg.threadId || msg.id!,
+            gmail_history_id: msg.historyId || null,
+            gmail_labels: labels,
             from_address: fromAddress,
+            from_name: null, // Could extract from "From" header if needed
             to_addresses: toAddresses,
             cc_addresses: ccAddresses,
             bcc_addresses: bccAddresses,
-            subject: getHeader("Subject"),
+            subject: getHeader("Subject") || "(No subject)",
             snippet: msg.snippet || "",
+            body_html: bodyHtml,
+            body_text: bodyText,
             internal_date: msg.internalDate
               ? new Date(parseInt(msg.internalDate)).toISOString()
-              : null,
-            labels,
-            is_read: labels.includes("UNREAD") ? false : true,
-            is_important: labels.includes("IMPORTANT"),
-            raw_headers: headers.reduce(
-              (acc, h) => {
-                if (h.name && h.value) {
-                  acc[h.name] = h.value;
-                }
-                return acc;
-              },
-              {} as Record<string, string>
-            ),
-            metadata: {},
+              : new Date().toISOString(),
+            is_read: !labels.includes("UNREAD"),
+            is_starred: labels.includes("STARRED"),
+            queue_status: labels.includes("INBOX") ? "open" : "archived",
+            classification_status: "pending", // Mark for automatic classification
+            metadata: {
+              raw_headers: headers.reduce(
+                (acc, h) => {
+                  if (h.name && h.value) {
+                    acc[h.name] = h.value;
+                  }
+                  return acc;
+                },
+                {} as Record<string, string>
+              ),
+            },
           },
           {
-            onConflict: "integration_id,external_id",
-            ignoreDuplicates: false,
+            onConflict: "user_id,gmail_message_id",
           }
         );
 

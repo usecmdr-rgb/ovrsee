@@ -2,7 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Calendar, Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import {
+  CreditCard,
+  Calendar,
+  Loader2,
+  AlertCircle,
+  ExternalLink,
+  Users,
+  CheckCircle2,
+  XCircle,
+  Receipt,
+} from "lucide-react";
 import { useSupabase } from "@/components/SupabaseProvider";
 import { useAppState } from "@/context/AppStateContext";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -10,23 +20,48 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { CONTACT_EMAILS } from "@/config/contacts";
 import type { CorePlanCode } from "@/lib/pricingConfig";
+import { formatPrice } from "@/lib/currency";
+import { PLAN_PRICING } from "@/lib/pricingConfig";
+import TeamSeatsSection from "@/components/subscription/TeamSeatsSection";
+import BillingPreview from "@/components/subscription/BillingPreview";
+import { BillingIntervalProvider } from "@/components/pricing/BillingIntervalContext";
 
-type SubscriptionStatus = "active" | "trialing" | "canceled" | "past_due" | "incomplete" | "incomplete_expired" | "unpaid";
+type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "canceled"
+  | "past_due"
+  | "incomplete"
+  | "incomplete_expired"
+  | "unpaid";
 
-interface SubscriptionInfo {
-  planCode: CorePlanCode | null;
-  status: SubscriptionStatus | null;
-  currentPeriodEnd: string | null;
-  trialEndsAt: string | null;
+interface SubscriptionData {
+  subscription: {
+    tier: string | null;
+    planCode: CorePlanCode | null;
+    status: SubscriptionStatus | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    trialEnd: string | null;
+  };
+  paymentMethod: {
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+  } | null;
+  isWorkspaceOwner: boolean;
+  workspaceId: string | null;
+  teamMemberCount?: number;
 }
 
 export default function BillingPage() {
   const router = useRouter();
   const { supabase } = useSupabase();
-  const { isAuthenticated, openAuthModal } = useAppState();
+  const { isAuthenticated, openAuthModal, language } = useAppState();
   const t = useTranslation();
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
@@ -35,14 +70,11 @@ export default function BillingPage() {
       openAuthModal("login");
       return;
     }
-    fetchSubscription();
-    // We intentionally omit fetchSubscription from the dependency array because it is
-    // a stable function reference for the lifetime of this component and re-creating
-    // the effect on every render is unnecessary.
+    fetchSubscriptionData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, openAuthModal]);
 
-  const fetchSubscription = async () => {
+  const fetchSubscriptionData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -57,34 +89,60 @@ export default function BillingPage() {
         return;
       }
 
-      // Fetch subscription from database
-      const { data: subscriptionData, error: subError } = await supabase
+      // Only fetch from database - no Stripe calls
+      const { data: subscriptionFromDb } = await supabase
         .from("subscriptions")
-        .select("plan, tier, status, current_period_end, trial_ends_at")
+        .select("plan, tier, status, current_period_end, cancel_at_period_end, trial_end")
         .eq("user_id", session.user.id)
         .single();
 
-      if (subError && subError.code !== "PGRST116") {
-        // PGRST116 = not found, which is okay
-        throw new Error(subError.message);
+      // Check if user is workspace owner and get team member count
+      const { data: workspace } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("owner_user_id", session.user.id)
+        .single();
+
+      let teamMemberCount = 0;
+      if (workspace) {
+        const { count } = await supabase
+          .from("workspace_seats")
+          .select("*", { count: "exact", head: true })
+          .eq("workspace_id", workspace.id)
+          .in("status", ["active", "pending"]);
+        teamMemberCount = count || 0;
       }
 
-      // Prefer new plan column when available, otherwise map legacy tier → plan
-      const planCode: CorePlanCode | null = subscriptionData?.plan
-        ? (subscriptionData.plan as CorePlanCode)
-        : subscriptionData?.tier === "basic"
-          ? "essentials"
-          : subscriptionData?.tier === "advanced"
-            ? "professional"
-            : subscriptionData?.tier === "elite"
-              ? "executive"
-              : null;
+      // Determine planCode - prefer plan from DB, then tier mapping
+      let planCode: CorePlanCode | null = null;
+      if (subscriptionFromDb?.plan) {
+        planCode = subscriptionFromDb.plan as CorePlanCode;
+      } else if (subscriptionFromDb?.tier) {
+        // Map tier to planCode
+        const tier = subscriptionFromDb.tier;
+        planCode =
+          tier === "basic"
+            ? "essentials"
+            : tier === "advanced"
+              ? "professional"
+              : tier === "elite"
+                ? "executive"
+                : null;
+      }
 
-      setSubscription({
-        planCode,
-        status: subscriptionData?.status as SubscriptionStatus | null,
-        currentPeriodEnd: subscriptionData?.current_period_end || null,
-        trialEndsAt: subscriptionData?.trial_ends_at || null,
+      setSubscriptionData({
+        subscription: {
+          tier: subscriptionFromDb?.tier || null,
+          planCode,
+          status: (subscriptionFromDb?.status as SubscriptionStatus) || null,
+          currentPeriodEnd: subscriptionFromDb?.current_period_end || null,
+          cancelAtPeriodEnd: subscriptionFromDb?.cancel_at_period_end || false,
+          trialEnd: subscriptionFromDb?.trial_end || null,
+        },
+        paymentMethod: null, // Don't fetch payment method unless user wants to update
+        isWorkspaceOwner: !!workspace,
+        workspaceId: workspace?.id || null,
+        teamMemberCount, // Add team member count
       });
     } catch (err: any) {
       setError(err.message || "Failed to load subscription information");
@@ -161,6 +219,17 @@ export default function BillingPage() {
     return status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ");
   };
 
+  const formatCardBrand = (brand: string) => {
+    return brand.charAt(0).toUpperCase() + brand.slice(1);
+  };
+
+  const getPlanPrice = (planCode: CorePlanCode | null, billingInterval: "monthly" | "yearly" = "monthly") => {
+    if (!planCode) return null;
+    const plan = PLAN_PRICING[planCode];
+    if (!plan) return null;
+    return billingInterval === "yearly" ? plan.yearlyAmount : plan.monthlyAmount;
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -177,119 +246,80 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 py-8 px-4">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-semibold">Billing</h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Manage your subscription and billing information
-        </p>
-      </div>
-
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-sm font-medium text-red-700 dark:text-red-300">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Current Plan Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Plan</CardTitle>
-          <CardDescription>Your active subscription details</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-xl font-semibold">{getPlanLabel(subscription?.planCode || null)}</h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Status: <span className="font-medium capitalize">{getStatusLabel(subscription?.status || null)}</span>
-              </p>
-              {subscription?.currentPeriodEnd && (
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  <Calendar className="inline h-4 w-4 mr-1" />
-                  Next billing date: {formatDate(subscription.currentPeriodEnd)}
-                </p>
-              )}
-              {subscription?.trialEndsAt && (
-                <p className="mt-1 text-sm text-blue-600 dark:text-blue-400">
-                  Trial ends: {formatDate(subscription.trialEndsAt)}
-                </p>
-              )}
+    <BillingIntervalProvider>
+      <div className="mx-auto max-w-6xl space-y-8 py-8 px-4">
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <p className="text-sm font-medium text-red-700 dark:text-red-300">{error}</p>
             </div>
           </div>
+        )}
 
-          {/* Security Notice */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Billing is handled securely by Stripe. Your payment information is never stored on our servers.
-            </p>
-          </div>
+        {/* Minimal Subscription Info */}
+        {subscriptionData && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl font-semibold">
+                      {getPlanLabel(subscriptionData.subscription.planCode || null)}
+                    </h3>
+                    {subscriptionData.subscription.status === "active" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Team Members Info */}
+                  {subscriptionData.isWorkspaceOwner && subscriptionData.teamMemberCount !== undefined && subscriptionData.teamMemberCount > 0 && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Users className="h-4 w-4 text-slate-400" />
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {subscriptionData.teamMemberCount} {subscriptionData.teamMemberCount === 1 ? "team member" : "team members"}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              onClick={handleManageBilling}
-              disabled={portalLoading}
-              className="flex-1"
-            >
-              {portalLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Opening...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Manage Billing
-                </>
-              )}
-            </Button>
-            <Button
-              onClick={handleChangePlan}
-              variant="secondary"
-              className="flex-1"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Change Plan
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                {/* Action Buttons - Only show when subscription is active */}
+                {subscriptionData.subscription.status === "active" && (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button onClick={handleManageBilling} disabled={portalLoading} variant="secondary" className="text-sm">
+                      {portalLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Opening...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Update Subscription
+                        </>
+                      )}
+                    </Button>
+                    <Button onClick={handleChangePlan} variant="secondary" className="text-sm">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Change Plan
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Support Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Need Help?</CardTitle>
-          <CardDescription>Contact our support team</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Questions about billing? Contact{" "}
-              <a
-                href={`mailto:${CONTACT_EMAILS.billing}`}
-                className="text-primary hover:underline font-medium"
-              >
-                {CONTACT_EMAILS.billing}
-              </a>
-            </p>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Need technical support? Contact{" "}
-              <a
-                href={`mailto:${CONTACT_EMAILS.support}`}
-                className="text-primary hover:underline font-medium"
-              >
-                {CONTACT_EMAILS.support}
-              </a>
-            </p>
+        {/* Team Management Section - Only show if workspace owner */}
+        {subscriptionData?.isWorkspaceOwner && (
+          <div>
+            <TeamSeatsSection />
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </div>
+    </BillingIntervalProvider>
   );
 }
-

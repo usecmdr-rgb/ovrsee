@@ -159,7 +159,7 @@ export default function HomePage() {
             </div>
           </article>
 
-          {/* Studio / Media */}
+          {/* Studio / Social */}
           <article className="rounded-3xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 relative flex flex-col" role="listitem">
             {fakeStats.studio.alerts > 0 && (
               <div className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white">

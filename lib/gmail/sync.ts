@@ -1,6 +1,7 @@
 /**
  * Gmail Sync Service
  * Handles syncing Gmail messages to OVRSEE email queue
+ * Now uses integrations table instead of gmail_connections
  */
 
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
@@ -12,6 +13,7 @@ import {
   extractEmailBody,
   type GmailMessage,
 } from "./client";
+import { getOrCreateWorkspace, getWorkspaceIntegration } from "@/lib/sync/integrations";
 
 export interface SyncResult {
   synced: number;
@@ -35,19 +37,18 @@ export async function initialGmailSync(
 
   console.log(`[Gmail Sync] Starting initial sync for user_id: ${userId}, daysBack: ${daysBack}, maxMessages: ${maxMessages}`);
 
-  // Check if Gmail is connected
-  const { data: connection } = await supabase
-    .from("gmail_connections")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  // Get or create workspace
+  const workspace = await getOrCreateWorkspace(userId);
 
-  if (!connection) {
-    console.error(`[Gmail Sync] No Gmail connection found for user_id: ${userId}`);
+  // Check if Gmail is connected (using integrations table)
+  const integration = await getWorkspaceIntegration(workspace.id, "gmail");
+
+  if (!integration || !integration.is_active) {
+    console.error(`[Gmail Sync] No Gmail integration found for workspace_id: ${workspace.id}, user_id: ${userId}`);
     throw new Error("Gmail not connected");
   }
 
-  console.log(`[Gmail Sync] Found Gmail connection for user_id: ${userId}`);
+  console.log(`[Gmail Sync] Found Gmail integration for workspace_id: ${workspace.id}, user_id: ${userId}`);
 
   // Calculate date for query
   const dateThreshold = new Date();
@@ -116,7 +117,8 @@ export async function initialGmailSync(
                 is_read: !message.labelIds?.includes("UNREAD"),
                 is_starred: message.labelIds?.includes("STARRED"),
                 queue_status: determineQueueStatus(message.labelIds || []),
-                category_id: determineCategory(parsed.subject || "", message.snippet || ""),
+                category: determineCategory(parsed.subject || "", message.snippet || ""), // Legacy simple classification, will be overridden by AI
+                classification_status: "pending", // Mark for automatic classification
                 updated_at: new Date().toISOString(),
               },
               {
@@ -151,16 +153,20 @@ export async function initialGmailSync(
       pageToken = listResponse.nextPageToken;
     } while (pageToken && synced < maxMessages);
 
-    // Update connection with last sync info
+    // Update integration with last sync info
+    // Note: last_history_id would need to be stored in metadata if needed
     await supabase
-      .from("gmail_connections")
+      .from("integrations")
       .update({
-        last_history_id: lastHistoryId,
-        last_sync_at: new Date().toISOString(),
-        sync_status: "idle",
-        sync_error: null,
+        last_synced_at: new Date().toISOString(),
+        sync_status: "connected",
+        last_error: null,
+        metadata: {
+          ...(integration.metadata || {}),
+          last_history_id: lastHistoryId,
+        },
       })
-      .eq("user_id", userId);
+      .eq("id", integration.id);
 
     console.log(`[Gmail Sync] Initial sync completed for user_id: ${userId}, synced: ${synced}, updated: ${updated}, errors: ${errors}`);
 
@@ -173,12 +179,12 @@ export async function initialGmailSync(
   } catch (error: any) {
     // Update sync status with error
     await supabase
-      .from("gmail_connections")
+      .from("integrations")
       .update({
         sync_status: "error",
-        sync_error: error.message || "Unknown error",
+        last_error: error.message || "Unknown error",
       })
-      .eq("user_id", userId);
+      .eq("id", integration.id);
 
     throw error;
   }
@@ -190,45 +196,50 @@ export async function initialGmailSync(
 export async function incrementalGmailSync(userId: string): Promise<SyncResult> {
   const supabase = getSupabaseServerClient();
 
-  // Get last history ID
-  const { data: connection } = await supabase
-    .from("gmail_connections")
-    .select("last_history_id")
-    .eq("user_id", userId)
-    .single();
+  // Get or create workspace
+  const workspace = await getOrCreateWorkspace(userId);
 
-  if (!connection?.last_history_id) {
+  // Get Gmail integration
+  const integration = await getWorkspaceIntegration(workspace.id, "gmail");
+
+  if (!integration || !integration.is_active) {
+    throw new Error("Gmail not connected");
+  }
+
+  // Get last history ID from metadata
+  let lastHistoryId: string | undefined = integration.metadata?.last_history_id as string | undefined;
+
+  if (!lastHistoryId) {
     // No previous sync, do initial sync
     return initialGmailSync(userId, { daysBack: 7, maxMessages: 100 });
   }
 
   // Update sync status
   await supabase
-    .from("gmail_connections")
+    .from("integrations")
     .update({
       sync_status: "syncing",
-      sync_error: null,
+      last_error: null,
     })
-    .eq("user_id", userId);
+    .eq("id", integration.id);
 
   let synced = 0;
   let updated = 0;
   let errors = 0;
-  let lastHistoryId: string | undefined;
 
   try {
     // Get history
-    const historyResponse = await getGmailHistory(userId, connection.last_history_id, 100);
+    const historyResponse = await getGmailHistory(userId, lastHistoryId, 100);
 
     if (!historyResponse.history || historyResponse.history.length === 0) {
       // No changes
       await supabase
-        .from("gmail_connections")
+        .from("integrations")
         .update({
-          last_sync_at: new Date().toISOString(),
-          sync_status: "idle",
+          last_synced_at: new Date().toISOString(),
+          sync_status: "connected",
         })
-        .eq("user_id", userId);
+        .eq("id", integration.id);
 
       return { synced: 0, updated: 0, errors: 0 };
     }
@@ -266,7 +277,8 @@ export async function incrementalGmailSync(userId: string): Promise<SyncResult> 
                   is_read: !message.labelIds?.includes("UNREAD"),
                   is_starred: message.labelIds?.includes("STARRED"),
                   queue_status: determineQueueStatus(message.labelIds || []),
-                  category_id: determineCategory(parsed.subject || "", message.snippet || ""),
+                  category: determineCategory(parsed.subject || "", message.snippet || ""), // Legacy simple classification, will be overridden by AI
+                  classification_status: "pending", // Mark for automatic classification
                   updated_at: new Date().toISOString(),
                 },
                 {
@@ -343,16 +355,19 @@ export async function incrementalGmailSync(userId: string): Promise<SyncResult> 
       }
     }
 
-    // Update connection
+    // Update integration
     await supabase
-      .from("gmail_connections")
+      .from("integrations")
       .update({
-        last_history_id: lastHistoryId,
-        last_sync_at: new Date().toISOString(),
-        sync_status: "idle",
-        sync_error: null,
+        last_synced_at: new Date().toISOString(),
+        sync_status: "connected",
+        last_error: null,
+        metadata: {
+          ...(integration.metadata || {}),
+          last_history_id: lastHistoryId,
+        },
       })
-      .eq("user_id", userId);
+      .eq("id", integration.id);
 
     return {
       synced,
@@ -362,12 +377,12 @@ export async function incrementalGmailSync(userId: string): Promise<SyncResult> 
     };
   } catch (error: any) {
     await supabase
-      .from("gmail_connections")
+      .from("integrations")
       .update({
         sync_status: "error",
-        sync_error: error.message || "Unknown error",
+        last_error: error.message || "Unknown error",
       })
-      .eq("user_id", userId);
+      .eq("id", integration.id);
 
     throw error;
   }

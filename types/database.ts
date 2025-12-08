@@ -309,7 +309,7 @@ export interface EmailQueue {
   queue_status: "open" | "snoozed" | "done" | "archived";
   is_read: boolean;
   is_starred: boolean;
-  category_id: string | null;
+  category: string | null;
   snoozed_until: string | null; // ISO timestamp
   deleted_at: string | null; // ISO timestamp
   deleted_by: string | null; // UUID, references auth.users.id
