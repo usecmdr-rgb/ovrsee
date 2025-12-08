@@ -12,8 +12,10 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { getLanguageFromLocale } from "@/lib/localization";
 import { isDemoMode } from "@/lib/config/demoMode";
 import { useAccountMode } from "@/hooks/useAccountMode";
-import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, Clock, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2, RotateCcw } from "lucide-react";
+import { Loader2, CheckCircle2, Mail, Calendar as CalendarIcon, MapPin, Users, FileText, Edit2, AlertTriangle, CalendarCheck, Info, CheckCircle, AlertCircle, Plus, X, Trash2, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
 import SyncIntelligence from "@/components/sync/SyncIntelligence";
+import SendEmailModal from "@/components/sync/SendEmailModal";
+import EditDraftModal from "@/components/sync/EditDraftModal";
 import {
   getLocalDateString,
   getEventLocalDate,
@@ -45,6 +47,8 @@ interface GmailEmail {
   categoryId?: string;
   status?: "drafted" | "needs_reply" | "archived";
   draft?: string;
+  ai_draft?: string | null;
+  ai_draft_generated_at?: string | null;
 }
 
 interface EmailQueueItem {
@@ -67,7 +71,10 @@ interface EmailQueueItem {
   queue_status: "open" | "snoozed" | "done" | "archived";
   is_read: boolean;
   is_starred: boolean;
-  category_id?: string | null;
+  category?: string | null; // Updated from category_id to category
+  classification_raw?: Record<string, any> | null;
+  ai_draft?: string | null;
+  ai_draft_generated_at?: string | null;
   snoozed_until?: string | null;
   deleted_at?: string | null;
   deleted_by?: string | null;
@@ -139,11 +146,12 @@ const SyncPage = () => {
   const getCategoryName = (categoryId: string): string => {
     const categoryNameMap: Record<string, string> = {
       important: t("important"),
-      missed: t("syncMissedUnread"),
-      payments: t("syncPaymentsBills"),
-      invoices: t("invoices"),
-      meetings: t("syncUpcomingMeetings"),
-      subscriptions: t("syncSubscriptions"),
+      missed_unread: t("syncMissedUnread"),
+      payment_bill: t("syncPaymentsBills"),
+      invoice: t("invoices"),
+      marketing: "Marketing",
+      updates: "Updates",
+      other: "Other",
     };
     return categoryNameMap[categoryId] || categoryId;
   };
@@ -163,6 +171,18 @@ const SyncPage = () => {
     { role: "agent", text: "Tell me how you'd like to change or edit the draft." },
   ]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [emailDisplayLimit, setEmailDisplayLimit] = useState(5); // Show 5 emails initially
+  const [isEmailBoxExpanded, setIsEmailBoxExpanded] = useState(false);
+  const [emailBoxHeight, setEmailBoxHeight] = useState<number | null>(null); // Custom height from drag
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartY, setDragStartY] = useState(0);
+  const [dragStartHeight, setDragStartHeight] = useState(0);
+  const [isCategorizing, setIsCategorizing] = useState(false);
+  const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
+  const [draftError, setDraftError] = useState<Record<string, string>>({});
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [showEditDraftModal, setShowEditDraftModal] = useState(false);
   
   // Calendar state
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
@@ -357,44 +377,6 @@ const SyncPage = () => {
     fetchSyncStats();
   }, [fetchSyncStats]);
 
-  // Update alert categories with real counts for verified users, or use demo counts for demo mode
-  const alertCategories = useMemo(() => {
-    if (shouldUseDemoMode || !syncStats) {
-      // Use demo counts from default categories
-      return defaultAlertCategories;
-    }
-
-    // Update categories with real counts
-    return defaultAlertCategories.map((category) => {
-      let count = category.count; // Default to demo count if no match
-      
-      switch (category.id) {
-        case "important":
-          count = syncStats.important_emails;
-          break;
-        case "missed":
-          count = syncStats.missed_emails;
-          break;
-        case "payments":
-          count = syncStats.payments_bills;
-          break;
-        case "invoices":
-          count = syncStats.invoices;
-          break;
-        case "meetings":
-          count = syncStats.upcoming_meetings;
-          break;
-        case "subscriptions":
-          count = syncStats.subscriptions;
-          break;
-      }
-
-      return {
-        ...category,
-        count,
-      };
-    });
-  }, [shouldUseDemoMode, syncStats, defaultAlertCategories]);
 
   // For authenticated users, never show demo calendar events
   // Only show demo calendar if user is not authenticated AND demo mode is explicitly enabled
@@ -548,6 +530,14 @@ const SyncPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Check Gmail connection when authenticated
+  useEffect(() => {
+    if (isAuthenticated && activeTab === "email") {
+      checkGmailConnection();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -817,37 +807,32 @@ const SyncPage = () => {
         return;
       }
       
-      // First, check if OAuth is configured
+      // Check if OAuth is configured (using unified config endpoint)
       try {
-        const configCheck = await fetch("/api/gmail/check-config");
+        const configCheck = await fetch("/api/sync/google/check-config");
         const configData = await configCheck.json();
-        if (!configData.ok && configData.issues && configData.issues.length > 0) {
+        if (!configData.configured) {
           setIsConnectingGmail(false);
-          let errorMsg = "Gmail OAuth is not properly configured:\n\n";
-          errorMsg += configData.issues.join("\n");
-          if (configData.setupInstructions) {
-            errorMsg += "\n\nSetup Instructions:\n";
-            errorMsg += Object.values(configData.setupInstructions).join("\n");
+          let errorMsg = "Google OAuth is not properly configured:\n\n";
+          if (configData.issues && configData.issues.length > 0) {
+            errorMsg += configData.issues.join("\n");
+          }
+          if (configData.instructions) {
+            errorMsg += "\n\n" + configData.instructions.join("\n");
           }
           alert(errorMsg);
           return;
         }
       } catch (configError) {
-        console.warn("Could not check Gmail config:", configError);
+        console.warn("Could not check Google OAuth config:", configError);
         // Continue anyway - might be a network issue
       }
       
-      // Use session token - user must be authenticated
-      const authToken = session.access_token;
-      const userId = session.user.id;
-
-      // Pass userId in a header so the API can use it for the OAuth state
-      // Also pass the origin explicitly to ensure correct redirect URI
-      const res = await fetch("/api/gmail/auth", {
+      // Use unified Google OAuth endpoint (supports both Gmail and Calendar)
+      // This will connect both Gmail and Calendar in a single OAuth flow
+      const res = await fetch("/api/sync/google/oauth-url?returnTo=/sync", {
         headers: { 
-          Authorization: `Bearer ${authToken}`,
-          "X-User-Id": userId,
-          "Origin": window.location.origin,
+          Cookie: document.cookie, // Session cookie for auth
         },
       });
 
@@ -858,76 +843,67 @@ const SyncPage = () => {
         
         if (res.status === 401 || data.error === "Unauthorized") {
           // User needs to log in
-          alert("Please log in to connect Gmail.\n\nYou'll be redirected to the login page.");
+          alert("Please log in to connect Google services.\n\nYou'll be redirected to the login page.");
           openAuthModal("login");
           return;
         }
         
         // Show specific error message
-        const errorMsg = data.error || "Failed to connect Gmail";
+        const errorMsg = data.error || "Failed to connect Google services";
         const details = data.details ? `\n\nDetails: ${data.details}` : "";
-        const redirectUri = data.redirectUri || window.location.origin + "/api/gmail/callback";
         
-        if (errorMsg.includes("not configured") || errorMsg.includes("GMAIL_CLIENT_ID") || errorMsg.includes("Invalid Gmail Client ID") || data.setupRequired) {
+        if (errorMsg.includes("not configured") || errorMsg.includes("GOOGLE_CLIENT_ID")) {
           alert(
-            "Gmail OAuth is not properly configured.\n\n" +
+            "Google OAuth is not properly configured.\n\n" +
             "Setup Steps:\n" +
             "1. Go to https://console.cloud.google.com/\n" +
             "2. Create or select a project\n" +
-            "3. Enable Gmail API (APIs & Services → Library)\n" +
+            "3. Enable Gmail API and Calendar API (APIs & Services → Library)\n" +
             "4. Go to APIs & Services → Credentials\n" +
             "5. Click + CREATE CREDENTIALS → OAuth client ID\n" +
             "6. Application type: Web application\n" +
-            "7. Add redirect URI: " + redirectUri + "\n" +
+            "7. Add redirect URI: http://localhost:3000/api/sync/google/callback (dev) or https://ovrsee.ai/api/sync/google/callback (prod)\n" +
             "8. Copy the Client ID and Client Secret\n" +
             "9. Open .env.local and add:\n" +
-            "    GMAIL_CLIENT_ID=your_actual_client_id\n" +
-            "    GMAIL_CLIENT_SECRET=your_actual_client_secret\n" +
+            "    GOOGLE_CLIENT_ID=your_actual_client_id\n" +
+            "    GOOGLE_CLIENT_SECRET=your_actual_client_secret\n" +
+            "    GOOGLE_OAUTH_REDIRECT_URL=http://localhost:3000/api/sync/google/callback\n" +
             "10. Restart your dev server\n\n" +
-            "See GMAIL_SETUP.md for detailed instructions."
+            "See GOOGLE_OAUTH_COMPREHENSIVE_AUDIT.md for detailed instructions."
           );
         } else {
-          // Show user-friendly error message
-          const userMessage = errorMsg.includes("invalid_client") 
-            ? "We couldn't connect to Gmail. Please check your Gmail connection settings.\n\n" +
-              "This usually means:\n" +
-              "1. The OAuth client ID doesn't match Google Cloud Console\n" +
-              "2. The redirect URI doesn't match exactly\n" +
-              "3. Gmail OAuth credentials are missing or incorrect\n\n" +
-              "Visit /api/gmail/check-config to verify your configuration."
-            : `We couldn't connect to Gmail: ${errorMsg}${details}\n\nVisit /api/gmail/test to check your configuration.`;
-          alert(userMessage);
+          alert(`Failed to connect Google services: ${errorMsg}${details}`);
         }
         return;
       }
       
       const data = await res.json();
       
-      if (!data.authUrl) {
+      if (!data.url) {
         setIsConnectingGmail(false);
-        alert("Failed to get Gmail authorization URL. Please check your OAuth configuration.");
+        alert("Failed to get Google OAuth authorization URL. Please check your OAuth configuration.");
         return;
       }
 
-      // Redirect directly to OAuth URL instead of using popup
-      // This avoids popup blocker issues and is more reliable
-      window.location.href = data.authUrl;
+      // Redirect directly to OAuth URL
+      // This will authorize both Gmail and Calendar in one flow
+      window.location.href = data.url;
     } catch (error) {
-      console.error("Error connecting Gmail:", error);
+      console.error("Error connecting Google services:", error);
       setIsConnectingGmail(false);
       
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       
       if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
         alert(
-          "Network error connecting to Gmail.\n\n" +
+          "Network error connecting to Google services.\n\n" +
           "Please check:\n" +
           "1. Your internet connection\n" +
           "2. That the server is running\n" +
-          "3. That Gmail OAuth is configured in Google Cloud Console"
+          "3. That Google OAuth is configured in Google Cloud Console"
         );
       } else {
-        alert(`Failed to connect Gmail: ${errorMessage}\n\nCheck the browser console for more details.`);
+        alert(`Failed to connect Google services: ${errorMessage}\n\nCheck the browser console for more details.`);
       }
     }
   };
@@ -943,8 +919,8 @@ const SyncPage = () => {
         return;
       }
 
-      // Fetch from email queue API
-      const res = await fetch("/api/email-queue?status=open&includeDeleted=false", {
+      // Fetch from email queue API - show all non-deleted emails (not just "open" status)
+      const res = await fetch("/api/email-queue?includeDeleted=false&inboxOnly=false", {
         headers: { 
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -969,7 +945,8 @@ const SyncPage = () => {
           snippet: item.snippet || "",
           body: item.body_html || item.body_text || undefined,
           timestamp: new Date(item.internal_date).toISOString(),
-          categoryId: item.category_id || undefined,
+          categoryId: item.category || undefined,
+          draft: item.ai_draft || undefined,
           status: item.queue_status === "done" ? "archived" : item.queue_status === "open" ? "needs_reply" : "drafted",
         }));
         setGmailEmails(formattedEmails);
@@ -1026,6 +1003,87 @@ const SyncPage = () => {
     }
   };
 
+  const handleCategorize = async () => {
+    try {
+      if (!isAuthenticated || isCategorizing) return;
+      
+      setIsCategorizing(true);
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) {
+        setIsCategorizing(false);
+        return;
+      }
+
+      // Collect all currently loaded email IDs
+      const emailIds = emailQueueItems.map((item) => item.id);
+      
+      if (emailIds.length === 0) {
+        setIsCategorizing(false);
+        return;
+      }
+
+      // Call categorize API
+      const res = await fetch("/api/sync/email/categorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ ids: emailIds }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to categorize emails");
+      }
+
+      const data = await res.json();
+      
+      // Update local state with new categories
+      if (data.items && data.items.length > 0) {
+        const categoryMap = new Map(data.items.map((item: { id: string; category: string }) => [item.id, item.category]));
+        
+        // Update emailQueueItems
+        setEmailQueueItems((prev) =>
+          prev.map((item) => {
+            const newCategory = categoryMap.get(item.id);
+            if (newCategory) {
+              return { ...item, category: newCategory };
+            }
+            return item;
+          })
+        );
+
+        // Update gmailEmails
+        setGmailEmails((prev) =>
+          prev.map((email) => {
+            const newCategory = categoryMap.get(email.id);
+            if (newCategory) {
+              return { ...email, categoryId: newCategory };
+            }
+            return email;
+          })
+        );
+
+        // Update selected email if it was categorized
+        if (selectedEmail && "id" in selectedEmail) {
+          const newCategory = categoryMap.get(selectedEmail.id);
+          if (newCategory) {
+            setSelectedEmail({ ...selectedEmail, category: newCategory, categoryId: newCategory });
+          }
+        }
+      }
+
+      // Reload emails to get fresh data
+      await loadGmailEmails();
+    } catch (error: any) {
+      console.error("Error categorizing emails:", error);
+      alert(`Failed to categorize emails: ${error.message || "Unknown error"}`);
+    } finally {
+      setIsCategorizing(false);
+    }
+  };
+
   const handleRefresh = async () => {
     try {
       if (!isAuthenticated || isRefreshing) return;
@@ -1072,40 +1130,9 @@ const SyncPage = () => {
 
 
   const handleConnectCalendar = async () => {
-    // Check if user is authenticated via app state
-    if (!isAuthenticated) {
-      openAuthModal("login");
-      return;
-    }
-
-    try {
-      setIsConnectingCalendar(true);
-      const { data: { session }, error: sessionError } = await supabaseBrowserClient.auth.getSession();
-      
-      // If no session, try to get or create one
-      // In development, we can proceed without a real session
-      if (!session?.access_token && process.env.NODE_ENV === "production") {
-        // In production, require real authentication
-        openAuthModal("login");
-        setIsConnectingCalendar(false);
-        return;
-      }
-
-      const res = await fetch("/api/calendar/auth", {
-        headers: { Authorization: `Bearer ${session?.access_token || ""}` },
-      });
-
-      const data = await res.json();
-      if (!data.ok || !data.authUrl) throw new Error("Failed to get auth URL");
-
-      // Redirect directly to OAuth URL instead of using popup
-      // This avoids popup blocker issues and is more reliable
-      window.location.href = data.authUrl;
-    } catch (error) {
-      console.error("Error connecting calendar:", error);
-      alert("Failed to connect Google Calendar. Please try again.");
-      setIsConnectingCalendar(false);
-    }
+    // Use the same unified OAuth flow as Gmail (connects both services)
+    // Redirect to handleConnectGmail which uses the unified endpoint
+    handleConnectGmail();
   };
 
   const handleEventClick = (event: CalendarEvent) => {
@@ -1169,7 +1196,7 @@ const SyncPage = () => {
         fromAddress: email.fromAddress,
         subject: email.subject,
         timestamp: new Date(email.timestamp).toLocaleDateString(),
-        categoryId: email.categoryId || "other",
+        categoryId: email.categoryId || null, // Keep null for uncategorized
         status: email.status || "needs_reply",
         snippet: email.snippet,
         draft: email.draft || "",
@@ -1183,8 +1210,77 @@ const SyncPage = () => {
 
   const filteredEmails = useMemo(() => {
     if (!activeCategory) return displayEmails;
-    return displayEmails.filter((email) => email.categoryId === activeCategory);
+    // Filter: match category, or if "other" is selected, include null categories
+    return displayEmails.filter((email) => {
+      if (activeCategory === "other") {
+        return !email.categoryId || email.categoryId === "other";
+      }
+      return email.categoryId === activeCategory;
+    });
   }, [activeCategory, displayEmails]);
+
+  // Update alert categories with real counts based on actual email data
+  const alertCategories = useMemo(() => {
+    // Define the 7 fixed categories
+    const categoryDefinitions = [
+      { id: "important", name: "Important", color: "#ef4444", defaultColor: "#ef4444" },
+      { id: "missed_unread", name: "Missed / Unread", color: "#fb923c", defaultColor: "#fb923c" },
+      { id: "payment_bill", name: "Payments / Bills", color: "#22c55e", defaultColor: "#22c55e" },
+      { id: "invoice", name: "Invoices", color: "#a855f7", defaultColor: "#a855f7" },
+      { id: "marketing", name: "Marketing", color: "#3b82f6", defaultColor: "#3b82f6" },
+      { id: "updates", name: "Updates", color: "#06b6d4", defaultColor: "#06b6d4" },
+      { id: "other", name: "Other", color: "#94a3b8", defaultColor: "#94a3b8" },
+    ];
+
+    // Count emails by category
+    const categoryCounts = new Map<string, number>();
+    categoryDefinitions.forEach((cat) => categoryCounts.set(cat.id, 0));
+
+    // Count from displayEmails
+    displayEmails.forEach((email) => {
+      const category = email.categoryId || "other"; // Treat null as "other"
+      const current = categoryCounts.get(category) || 0;
+      categoryCounts.set(category, current + 1);
+    });
+
+    // Return categories with counts
+    return categoryDefinitions.map((cat) => ({
+      ...cat,
+      count: categoryCounts.get(cat.id) || 0,
+    }));
+  }, [displayEmails]);
+
+  // Handle drag for email box resize
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - dragStartY; // Inverted: dragging up decreases height, dragging down increases height
+      const newHeight = Math.max(100, Math.min(800, dragStartHeight + deltaY)); // Min 100px, max 800px
+      setEmailBoxHeight(newHeight);
+      
+      // Auto-expand if dragged beyond initial limit
+      if (newHeight > 5 * 100 && !isEmailBoxExpanded) {
+        setIsEmailBoxExpanded(true);
+        setEmailDisplayLimit(filteredEmails.length);
+      } else if (newHeight <= 5 * 100 && isEmailBoxExpanded) {
+        setIsEmailBoxExpanded(false);
+        setEmailDisplayLimit(5);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragStartY, dragStartHeight, isEmailBoxExpanded, filteredEmails.length]);
 
   const categoryMap = Object.fromEntries(alertCategories.map((cat) => [cat.id, cat]));
 
@@ -1272,9 +1368,50 @@ const SyncPage = () => {
     }
   };
 
-  const handleEmailSelect = (email: EmailRecord | GmailEmail | EmailQueueItem) => {
+  const handleEmailSelect = async (email: EmailRecord | GmailEmail | EmailQueueItem) => {
     setSelectedEmail(email);
     setChatMessages([{ role: "agent", text: t("syncTellSyncToChange") }]);
+    
+    // Fetch draft if email doesn't have one
+    if (!("ai_draft" in email) || !email.ai_draft) {
+      const emailId = email.id;
+      setDraftLoading(prev => ({ ...prev, [emailId]: true }));
+      setDraftError(prev => ({ ...prev, [emailId]: "" }));
+      
+      try {
+        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+        if (!session?.access_token) {
+          setDraftLoading(prev => ({ ...prev, [emailId]: false }));
+          return;
+        }
+
+        const res = await fetch(`/api/sync/email/draft/${emailId}`, {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          // Update email with draft
+          setEmailQueueItems(prev => 
+            prev.map(e => e.id === emailId ? { ...e, ai_draft: data.draft, ai_draft_generated_at: data.generatedAt } : e)
+          );
+          setGmailEmails(prev => 
+            prev.map(e => e.id === emailId ? { ...e, draft: data.draft } : e)
+          );
+          setSelectedEmail({ ...email, ai_draft: data.draft, ai_draft_generated_at: data.generatedAt });
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          setDraftError(prev => ({ ...prev, [emailId]: errorData.error || "Failed to generate draft" }));
+        }
+      } catch (error: any) {
+        console.error("Error fetching draft:", error);
+        setDraftError(prev => ({ ...prev, [emailId]: error.message || "Failed to generate draft" }));
+      } finally {
+        setDraftLoading(prev => ({ ...prev, [emailId]: false }));
+      }
+    }
   };
 
   // Helper functions to extract properties from different email types
@@ -1293,8 +1430,99 @@ const SyncPage = () => {
 
   const getEmailDraft = (email: EmailRecord | GmailEmail | EmailQueueItem | null): string => {
     if (!email) return "";
+    
+    // Check if email has ai_draft field (from API response)
+    if ("ai_draft" in email && email.ai_draft) {
+      return email.ai_draft;
+    }
+    
+    // Fallback to legacy draft field (for mock data)
     if ("draft" in email) return email.draft || "";
+    
     return "";
+  };
+
+  const handleEditDraft = () => {
+    if (!selectedEmail) return;
+    const draft = getEmailDraft(selectedEmail);
+    if (!draft) {
+      alert("No draft available. Please generate a draft first.");
+      return;
+    }
+    setShowEditDraftModal(true);
+  };
+
+  const handleSaveDraftFromModal = async (editedDraft: string) => {
+    if (!selectedEmail || !editedDraft.trim()) return;
+
+    setIsSavingDraft(true);
+    try {
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) {
+        setIsSavingDraft(false);
+        return;
+      }
+
+      const emailId = selectedEmail.id;
+
+      // Update draft in database
+      const res = await fetch(`/api/sync/email/draft/${emailId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ draft: editedDraft.trim() }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setEmailQueueItems((prev) =>
+          prev.map((e) =>
+            e.id === emailId
+              ? { ...e, ai_draft: editedDraft.trim(), ai_draft_generated_at: new Date().toISOString() }
+              : e
+          )
+        );
+        setGmailEmails((prev) =>
+          prev.map((e) =>
+            e.id === emailId ? { ...e, draft: editedDraft.trim(), ai_draft: editedDraft.trim() } : e
+          )
+        );
+        setSelectedEmail({
+          ...selectedEmail,
+          ai_draft: editedDraft.trim(),
+          ai_draft_generated_at: new Date().toISOString(),
+        });
+        setShowEditDraftModal(false);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || "Failed to save draft");
+      }
+    } catch (error: any) {
+      console.error("Error saving draft:", error);
+      alert(`Failed to save draft: ${error.message || "Unknown error"}`);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const handleAcceptDraft = () => {
+    if (!selectedEmail) return;
+    
+    const draft = getEmailDraft(selectedEmail);
+    if (!draft) {
+      alert("No draft available. Please generate a draft first.");
+      return;
+    }
+
+    setShowSendModal(true);
+  };
+
+  const handleSendSuccess = () => {
+    // Reload emails to reflect sent status
+    loadGmailEmails();
+    // Optionally show success toast
   };
 
   const getEmailSubject = (email: EmailRecord | GmailEmail | EmailQueueItem | null): string => {
@@ -1678,59 +1906,7 @@ const SyncPage = () => {
           <div className="space-y-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex-1" />
-              <div className="flex items-center gap-3">
-                {/* Sync Status Indicator */}
-                {isGmailConnected && syncStatus && (
-                  <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900/60">
-                    {syncStatus.syncStatus === "syncing" || isSyncing ? (
-                      <>
-                        <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                        <span className="text-slate-600 dark:text-slate-400">Syncing...</span>
-                      </>
-                    ) : syncStatus.syncStatus === "error" ? (
-                      <>
-                        <AlertCircle className="h-3 w-3 text-red-500" />
-                        <span className="text-red-600 dark:text-red-400">Sync error</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                        <span className="text-slate-600 dark:text-slate-400">
-                          {syncStatus.lastSyncAt ? (
-                            <>
-                              Connected to Gmail • Last synced {formatSyncTime(syncStatus.lastSyncAt)}
-                            </>
-                          ) : (
-                            "Connected to Gmail"
-                          )}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )}
-                
-                {/* Sync Now Button */}
-                {isGmailConnected && (
-                  <button
-                    onClick={triggerSync}
-                    disabled={isSyncing}
-                    className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {isSyncing ? (
-                      <>
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Syncing...
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="h-3 w-3" />
-                        Sync Now
-                      </>
-                    )}
-                  </button>
-                )}
-                
-                {/* Connect/Disconnect Button */}
+              <div className="flex items-center gap-2">
                 {!isGmailConnected ? (
                   <button
                     onClick={handleConnectGmail}
@@ -1745,48 +1921,28 @@ const SyncPage = () => {
                     ) : (
                       <>
                         <Mail className="h-4 w-4" />
-                        {t("syncConnectGmail")}
+                        Connect your Gmail
                       </>
                     )}
                   </button>
                 ) : (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
                       <CheckCircle2 className="h-4 w-4" />
                       Connected to Gmail
-                      {syncStatus?.lastSyncAt && (
-                        <span className="text-xs opacity-70">
-                          (Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()})
-                        </span>
-                      )}
                     </div>
                     <button
-                      onClick={async () => {
-                        if (!isAuthenticated) return;
-                        const { data: { session } } = await supabaseBrowserClient.auth.getSession();
-                        if (!session?.access_token) return;
-                        
-                        if (confirm("Are you sure you want to disconnect Gmail? Your email queue will remain but won't sync.")) {
-                          try {
-                            const res = await fetch("/api/gmail/disconnect", {
-                              method: "DELETE",
-                              headers: { Authorization: `Bearer ${session.access_token}` },
-                            });
-                            if (res.ok) {
-                              setIsGmailConnected(false);
-                              setSyncStatus(null);
-                              setEmailQueueItems([]);
-                              setGmailEmails([]);
-                            }
-                          } catch (error) {
-                            console.error("Error disconnecting:", error);
-                          }
-                        }
-                      }}
-                      className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+                      onClick={triggerSync}
+                      disabled={isSyncing || isRefreshing}
+                      className="p-2 rounded-full border border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      title="Refresh inbox"
+                      aria-label="Refresh inbox"
                     >
-                      <X className="h-4 w-4" />
-                      Disconnect
+                      {isSyncing || isRefreshing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 )}
@@ -1839,6 +1995,20 @@ const SyncPage = () => {
             {/* Only show alert categories for verified users with real data */}
             {!shouldUseDemoMode && syncStats && (
               <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+                {/* All option */}
+                <button
+                  onClick={() => setActiveCategory(null)}
+                  className={`rounded-2xl p-3 text-left text-sm font-semibold shadow-sm transition ${
+                    activeCategory === null
+                      ? "bg-slate-900 text-white ring-2 ring-slate-700 dark:bg-white dark:text-slate-900 dark:ring-slate-300"
+                      : "bg-white/80 text-slate-700 border border-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:border-slate-700"
+                  }`}
+                >
+                  <p>All</p>
+                  <p className="text-xs opacity-80">
+                    {displayEmails.length} {displayEmails.length === 1 ? "email" : "emails"}
+                  </p>
+                </button>
                 {alertCategories
                   .filter((category) => category.count > 0)
                   .map((category) => (
@@ -1864,6 +2034,25 @@ const SyncPage = () => {
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold">{t("syncEmailQueue")}</h2>
                   <div className="flex items-center gap-2">
+                    {isGmailConnected && emailQueueItems.length > 0 && (
+                      <button
+                        onClick={handleCategorize}
+                        disabled={isCategorizing}
+                        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isCategorizing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Categorizing...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4" />
+                            Categorize emails
+                          </>
+                        )}
+                      </button>
+                    )}
                     {activeCategory && (
                       <button onClick={() => setActiveCategory(null)} className="text-xs uppercase tracking-wide text-brand-accent">
                         {t("syncClearFilter")}
@@ -1884,7 +2073,7 @@ const SyncPage = () => {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="mt-4">
                   {isLoadingEmails ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
@@ -1897,60 +2086,78 @@ const SyncPage = () => {
                           ? "Gmail is connected, but there are no emails to show yet." 
                           : t("syncConnectGmailToView")}
                       </p>
-                      {isGmailConnected && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await triggerSync();
-                            } catch (error) {
-                              console.error("Sync failed:", error);
-                              alert("Failed to sync emails. Please try again.");
-                            }
-                          }}
-                          disabled={isSyncing}
-                          className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                        >
-                          {isSyncing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Syncing...
-                            </>
-                          ) : (
-                            <>
-                              <Mail className="h-4 w-4" />
-                              Sync now
-                            </>
-                          )}
-                        </button>
-                      )}
                     </div>
                   ) : (
-                    filteredEmails.map((email) => (
-                      <button
-                        key={email.id}
-                        onClick={() => handleEmailSelect(email)}
-                        className={`w-full py-3 text-left ${
-                          selectedEmail?.id === email.id ? "bg-slate-100 dark:bg-slate-800/60" : ""
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold">{email.sender}</p>
-                          <span className="text-xs text-slate-500">{email.timestamp}</span>
+                    <>
+                      <div className="relative border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                        <div 
+                          className={`divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto ${
+                            isDragging ? "select-none" : ""
+                          }`}
+                          style={{
+                            maxHeight: emailBoxHeight !== null 
+                              ? `${emailBoxHeight}px` 
+                              : isEmailBoxExpanded 
+                                ? 'none' 
+                                : `${5 * 100}px`,
+                            transition: isDragging ? 'none' : 'max-height 0.2s ease-out',
+                            paddingBottom: '16px', // Space for drag handle
+                          }}
+                        >
+                          {filteredEmails.slice(0, isEmailBoxExpanded ? filteredEmails.length : emailDisplayLimit).map((email) => (
+                            <button
+                              key={email.id}
+                              onClick={() => handleEmailSelect(email)}
+                              className={`w-full py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
+                                selectedEmail?.id === email.id ? "bg-slate-100 dark:bg-slate-800/60" : ""
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold">{email.sender}</p>
+                                <span className="text-xs text-slate-500">{email.timestamp}</span>
+                              </div>
+                              <p className="text-sm text-slate-600 dark:text-slate-300">{email.subject}</p>
+                              <div className="mt-2 flex items-center space-x-2 text-xs">
+                                <span
+                                  className="rounded-full px-2 py-1 text-white"
+                                  style={{ backgroundColor: categoryMap[email.categoryId || "other"]?.color || "#0f172a" }}
+                                >
+                                  {email.categoryId ? getCategoryName(email.categoryId) : "Other (uncategorized)"}
+                                </span>
+                                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 dark:bg-slate-800">
+                                  {email.status.replace("_", " ")}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300">{email.subject}</p>
-                        <div className="mt-2 flex items-center space-x-2 text-xs">
-                          <span
-                            className="rounded-full px-2 py-1 text-white"
-                            style={{ backgroundColor: categoryMap[email.categoryId]?.color || "#0f172a" }}
-                          >
-                            {email.categoryId ? getCategoryName(email.categoryId) : t("syncUncategorized")}
-                          </span>
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 dark:bg-slate-800">
-                            {email.status.replace("_", " ")}
-                          </span>
+                        {/* Drag handle */}
+                        <div
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(true);
+                            setDragStartY(e.clientY);
+                            const scrollableDiv = e.currentTarget.previousElementSibling as HTMLElement;
+                            const currentHeight = emailBoxHeight !== null 
+                              ? emailBoxHeight 
+                              : isEmailBoxExpanded 
+                                ? scrollableDiv?.scrollHeight || 0
+                                : 5 * 100;
+                            setDragStartHeight(currentHeight);
+                          }}
+                          className={`absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center group z-10 ${
+                            isDragging ? "bg-slate-300 dark:bg-slate-600" : "hover:bg-slate-100 dark:hover:bg-slate-800 bg-slate-50 dark:bg-slate-900/50"
+                          } transition-colors`}
+                          style={{
+                            borderTop: '1px solid',
+                            borderColor: 'rgb(226 232 240 / 0.5)',
+                          }}
+                        >
+                          <div className="w-12 h-1 rounded-full bg-slate-400 dark:bg-slate-500 group-hover:bg-slate-500 dark:group-hover:bg-slate-400 transition-colors" />
                         </div>
-                      </button>
-                    ))
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -1967,15 +2174,40 @@ const SyncPage = () => {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-slate-500">{t("syncDraft")}</p>
-                      <p className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white">
-                        {getEmailDraft(selectedEmail) || t("syncPlaceholderDraft")}
-                      </p>
+                      {draftLoading[selectedEmail.id] ? (
+                        <div className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Generating draft...</span>
+                        </div>
+                      ) : draftError[selectedEmail.id] ? (
+                        <div className="mt-1 rounded-2xl bg-red-900/90 p-3 text-sm text-white dark:bg-red-800/50">
+                          <p className="mb-2">{draftError[selectedEmail.id]}</p>
+                          <button
+                            onClick={() => handleEmailSelect(selectedEmail)}
+                            className="text-xs underline hover:no-underline"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-1 rounded-2xl bg-slate-900/90 p-3 text-sm text-white dark:bg-white/10 dark:text-white whitespace-pre-wrap">
+                          {getEmailDraft(selectedEmail) || t("syncPlaceholderDraft")}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-3">
-                      <button className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800 dark:bg-white dark:text-slate-900">
+                      <button
+                        onClick={handleAcceptDraft}
+                        disabled={!getEmailDraft(selectedEmail) || draftLoading[selectedEmail.id]}
+                        className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      >
                         {t("syncAcceptDraft")}
                       </button>
-                      <button className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                      <button
+                        onClick={handleEditDraft}
+                        disabled={!getEmailDraft(selectedEmail) || draftLoading[selectedEmail.id]}
+                        className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
                         {t("syncEditDraft")}
                       </button>
                     </div>
@@ -2023,6 +2255,33 @@ const SyncPage = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Send Email Modal */}
+        {selectedEmail && (
+          <SendEmailModal
+            open={showSendModal}
+            onClose={() => setShowSendModal(false)}
+            email={{
+              id: selectedEmail.id,
+              to: "from_address" in selectedEmail 
+                ? selectedEmail.from_address 
+                : "fromAddress" in selectedEmail 
+                  ? selectedEmail.fromAddress 
+                  : "",
+              toName: "from_name" in selectedEmail 
+                ? selectedEmail.from_name 
+                : "sender" in selectedEmail 
+                  ? selectedEmail.sender 
+                  : null,
+              subject: getEmailSubject(selectedEmail) || "",
+              body: getEmailDraft(selectedEmail) || "",
+              threadId: "gmail_thread_id" in selectedEmail 
+                ? selectedEmail.gmail_thread_id 
+                : undefined,
+            }}
+            onSendSuccess={handleSendSuccess}
+          />
         )}
 
         {activeTab === "calendar" && (
@@ -3261,6 +3520,62 @@ const SyncPage = () => {
           </div>
         )}
       </div>
+
+      {/* Send Email Modal */}
+      {selectedEmail && (
+        <SendEmailModal
+          open={showSendModal}
+          onClose={() => setShowSendModal(false)}
+          email={{
+            id: selectedEmail.id,
+            to: "from_address" in selectedEmail 
+              ? selectedEmail.from_address 
+              : "fromAddress" in selectedEmail 
+                ? selectedEmail.fromAddress 
+                : "",
+            toName: "from_name" in selectedEmail 
+              ? selectedEmail.from_name 
+              : "sender" in selectedEmail 
+                ? selectedEmail.sender 
+                : null,
+            subject: getEmailSubject(selectedEmail) || "",
+            body: getEmailDraft(selectedEmail) || "",
+            threadId: "gmail_thread_id" in selectedEmail 
+              ? selectedEmail.gmail_thread_id 
+              : undefined,
+          }}
+          onSendSuccess={handleSendSuccess}
+        />
+        
+        {/* Edit Draft Modal */}
+        <EditDraftModal
+          open={showEditDraftModal}
+          onClose={() => setShowEditDraftModal(false)}
+          email={{
+            id: selectedEmail.id,
+            to: "from_address" in selectedEmail 
+              ? selectedEmail.from_address 
+              : "fromAddress" in selectedEmail 
+                ? selectedEmail.fromAddress 
+                : "",
+            toName: "from_name" in selectedEmail 
+              ? selectedEmail.from_name 
+              : "sender" in selectedEmail 
+                ? selectedEmail.sender 
+                : null,
+            subject: `Re: ${getEmailSubject(selectedEmail) || ""}`,
+            body: getEmailDraft(selectedEmail) || "",
+            originalFrom: getEmailSender(selectedEmail),
+            originalBody: ("body_text" in selectedEmail && selectedEmail.body_text) 
+              ? selectedEmail.body_text 
+              : ("body_html" in selectedEmail && selectedEmail.body_html)
+              ? selectedEmail.body_html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+              : getEmailSnippet(selectedEmail) || "",
+          }}
+          onSave={handleSaveDraftFromModal}
+          isSaving={isSavingDraft}
+        />
+      )}
     </div>
   );
 };

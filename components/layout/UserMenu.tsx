@@ -50,7 +50,7 @@ const UserMenu = () => {
         router.push("/account/subscription");
         break;
       case "settings":
-        setShowSettingsModal(true);
+        router.push("/settings");
         break;
       default:
         break;

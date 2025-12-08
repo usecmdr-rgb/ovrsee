@@ -57,6 +57,9 @@ export const metadata: Metadata = {
     description: "Delegate calls, inbox, content, and insights to OVRSEE. Four focused AI agents handle communications, media polish, and reporting.",
     images: ["/ovrsee_og.png"],
   },
+  other: {
+    "facebook-domain-verification": "77oeogvqah5u8h1ar84dzp8h7bxfl1",
+  },
 };
 
 export const viewport: Viewport = {
