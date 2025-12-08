@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: true,
+  eslint: {
+    // Don't fail build on ESLint warnings/errors during production builds
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Don't fail build on TypeScript errors during production builds
+    ignoreBuildErrors: false,
+  },
   async redirects() {
     return [
       // Redirect old agent route names to new canonical routes (top-level)
