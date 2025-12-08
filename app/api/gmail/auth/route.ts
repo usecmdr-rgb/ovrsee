@@ -5,7 +5,15 @@ import { getOAuthRedirectUri } from "@/lib/oauth-helpers";
 /**
  * Gmail OAuth Authorization Endpoint
  * 
- * This endpoint generates the Google OAuth authorization URL for Gmail integration.
+ * ⚠️ DEPRECATED: This route is deprecated. Use /api/sync/google/oauth-url instead.
+ * 
+ * This legacy endpoint is kept for backward compatibility but should not be used for new integrations.
+ * The unified Google OAuth flow at /api/sync/google/* provides:
+ * - Combined Gmail + Calendar authorization
+ * - Better token management in integrations table
+ * - Consistent error handling
+ * 
+ * This endpoint will return 410 Gone or redirect to the unified route.
  * 
  * IMPORTANT: This is SEPARATE from Supabase Google authentication:
  * - Supabase Google login: Uses Supabase's OAuth client (configured in Supabase dashboard)
@@ -89,6 +97,22 @@ function getGmailClientSecret(): string {
 }
 
 export async function GET(request: NextRequest) {
+  // Deprecation: Return error directing to unified route
+  return NextResponse.json(
+    {
+      error: "DEPRECATED",
+      message: "This endpoint is deprecated. Use /api/sync/google/oauth-url instead.",
+      migration: {
+        oldRoute: "/api/gmail/auth",
+        newRoute: "/api/sync/google/oauth-url",
+        reason: "Unified Google OAuth flow supports both Gmail and Calendar with better token management",
+        documentation: "See GOOGLE_OAUTH_COMPREHENSIVE_AUDIT.md for migration guide",
+      },
+    },
+    { status: 410 } // 410 Gone
+  );
+
+  /* LEGACY CODE BELOW - Not executed but kept for reference
   try {
     // Validate and get client ID (throws if invalid)
     let GMAIL_CLIENT_ID: string;
@@ -217,5 +241,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+  */
 }
 

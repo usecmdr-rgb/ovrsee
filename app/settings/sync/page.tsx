@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { Loader2, Save, ChevronRight } from "lucide-react";
-import { isAutoSequenceFollowUpsEnabled } from "@/lib/sync/featureFlags";
+// Feature flag check moved to API call to avoid client-side process.env access
 
 interface SyncPreferences {
   follow_up_threshold_days: number;
@@ -58,10 +58,30 @@ export default function SyncSettingsPage() {
 
   useEffect(() => {
     loadPreferences();
-    if (isAutoSequenceFollowUpsEnabled()) {
-      loadSequences();
-    }
+    checkFeatureFlagAndLoadSequences();
   }, []);
+
+  const checkFeatureFlagAndLoadSequences = async () => {
+    try {
+      const { data: { session } } = await supabaseBrowserClient.auth.getSession();
+      if (!session?.access_token) return;
+
+      // Check feature flag via API
+      const res = await fetch("/api/sync/sequences", {
+        method: "HEAD", // Just check if endpoint exists/is enabled
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (res.ok || res.status === 405) { // 405 = Method Not Allowed means endpoint exists
+        loadSequences();
+      }
+    } catch (error) {
+      // Silently fail - feature might not be enabled
+      console.log("Sequences feature not available");
+    }
+  };
 
   const loadSequences = async () => {
     try {
@@ -296,7 +316,7 @@ export default function SyncSettingsPage() {
               }
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
               rows={4}
-              placeholder="Describe how you want Sync to write emails. For example: 'Use a warm but professional tone, avoid jargon, keep sentences short.'"
+              placeholder="Describe how you want Sync to write emails. For example: &apos;Use a warm but professional tone, avoid jargon, keep sentences short.&apos;"
             />
           </div>
         )}
@@ -320,7 +340,7 @@ export default function SyncSettingsPage() {
       </section>
 
       {/* Follow-Up Sequences */}
-      {isAutoSequenceFollowUpsEnabled() && (
+      {sequences.length > 0 && (
         <section className="space-y-4 border-t border-slate-200 dark:border-slate-700 pt-6">
           <div className="flex items-center justify-between">
             <div>
