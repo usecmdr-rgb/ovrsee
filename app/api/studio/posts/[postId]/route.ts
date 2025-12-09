@@ -17,7 +17,7 @@ import { handleApiError } from "@/lib/studio/api-error-response";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   let workspaceId: string | undefined;
   let userId: string | undefined;
@@ -35,7 +35,7 @@ export async function GET(
       );
     }
 
-    const postId = params.postId;
+    const { postId } = await params;
 
     // Fetch post with latest metrics
     const { data: post, error: postError } = await supabaseClient
@@ -117,7 +117,7 @@ export async function GET(
     return await handleApiError(error, {
       workspaceId,
       route: "/api/studio/posts/[postId]",
-      postId: params.postId,
+      postId: (await params).postId,
       userId,
     });
   }
@@ -125,7 +125,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   let workspaceId: string | undefined;
   let userId: string | undefined;
@@ -143,7 +143,7 @@ export async function PATCH(
       );
     }
 
-    const postId = params.postId;
+    const { postId } = await params;
     const body = await request.json();
     const { scheduled_for, status } = body;
 
@@ -258,7 +258,7 @@ export async function PATCH(
     return await handleApiError(error, {
       workspaceId,
       route: "/api/studio/posts/[postId]",
-      postId: params.postId,
+      postId: (await params).postId,
       userId,
     });
   }

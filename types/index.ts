@@ -457,4 +457,5 @@ export interface SubscriptionData {
   paymentMethod: PaymentMethodInfo | null;
   trial?: TrialInfo;
   retention?: RetentionInfo;
+  teamMemberCount?: number;
 }

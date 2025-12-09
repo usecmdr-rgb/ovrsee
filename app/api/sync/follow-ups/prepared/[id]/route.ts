@@ -8,12 +8,12 @@ import { requireAuthFromRequest } from "@/lib/auth-helpers";
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const draftId = params.id;
+    const { id: draftId } = await params;
 
     const supabase = getSupabaseServerClient();
 

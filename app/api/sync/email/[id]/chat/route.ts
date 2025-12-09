@@ -16,12 +16,12 @@ const chatRequestSchema = z.object({
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const emailId = params.id;
+    const { id: emailId } = await params;
     const supabase = getSupabaseServerClient();
 
     // Parse and validate request body

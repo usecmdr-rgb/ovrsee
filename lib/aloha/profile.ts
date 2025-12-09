@@ -123,7 +123,7 @@ export async function updateAlohaProfile(
     display_name?: string;
     aloha_self_name?: string | null; // Custom name the agent calls itself
     voice_id?: string; // Legacy field
-    voice_key?: AlohaVoiceKey; // New voice profile system
+    voice_key?: AlohaVoiceKey | string; // New voice profile system (accept string for flexibility)
     voice_options?: Record<string, any> | null;
     voice_pack_url?: string | null; // URL to the generated voice pack MP3
   }

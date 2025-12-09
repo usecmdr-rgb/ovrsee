@@ -787,6 +787,7 @@ export const translations = {
     subscriptionBilling: "Subscription & Billing",
     manageSubscriptionPlan: "Manage your subscription plan, payment methods, and billing information.",
     loadingSubscriptionDetails: "Loading subscription details...",
+    updateSubscription: "Update Subscription",
     tryAgain: "Try again",
     currentPlan: "Current Plan",
     activeSubscriptionDetails: "Your active subscription details",

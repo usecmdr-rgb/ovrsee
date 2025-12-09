@@ -10,7 +10,7 @@ import { isFollowUpSuggestionsEnabled } from "@/lib/sync/featureFlags";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     if (!isFollowUpSuggestionsEnabled()) {
@@ -40,7 +40,7 @@ export async function POST(
     }
 
     const userId = userResult.user.id;
-    const emailId = params.id;
+    const { id: emailId } = await params;
 
     // Get email
     const { data: email, error: emailError } = await supabase

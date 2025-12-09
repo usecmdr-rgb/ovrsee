@@ -11,7 +11,7 @@ import { getWorkspaceIdForUser } from "@/lib/workspace-helpers";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -25,7 +25,7 @@ export async function GET(
       );
     }
 
-    const campaignId = params.id;
+    const { id: campaignId } = await params;
 
     // Get campaign
     const { data: campaign, error: campaignError } = await supabaseClient

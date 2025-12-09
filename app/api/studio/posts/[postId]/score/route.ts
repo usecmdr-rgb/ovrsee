@@ -13,7 +13,7 @@ import { scoreDraftPost } from "@/lib/studio/scoring-service";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -27,7 +27,7 @@ export async function POST(
       );
     }
 
-    const postId = params.postId;
+    const { postId } = await params;
     const body = await request.json();
     const { generateExplanation = false } = body;
 

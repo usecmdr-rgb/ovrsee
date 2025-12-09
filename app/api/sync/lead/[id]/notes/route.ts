@@ -8,12 +8,12 @@ import { requireAuthFromRequest } from "@/lib/auth-helpers";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const leadId = params.id;
+    const { id: leadId } = await params;
 
     const supabase = getSupabaseServerClient();
 
@@ -60,12 +60,12 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const leadId = params.id;
+    const { id: leadId } = await params;
 
     const body = await request.json();
     const { body: noteBody } = body;

@@ -19,7 +19,7 @@ import {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { experimentId: string } }
+  { params }: { params: Promise<{ experimentId: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -33,7 +33,7 @@ export async function GET(
       );
     }
 
-    const experimentId = params.experimentId;
+    const { experimentId } = await params;
 
     // Get experiment
     const experiment = await getExperiment(experimentId, supabaseClient);
@@ -118,7 +118,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { experimentId: string } }
+  { params }: { params: Promise<{ experimentId: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -132,7 +132,7 @@ export async function POST(
       );
     }
 
-    const experimentId = params.experimentId;
+    const { experimentId } = await params;
     const body = await request.json();
     const { action } = body;
 

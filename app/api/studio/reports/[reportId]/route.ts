@@ -12,7 +12,7 @@ import { getReport } from "@/lib/studio/report-service";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { reportId: string } }
+  { params }: { params: Promise<{ reportId: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -26,7 +26,7 @@ export async function GET(
       );
     }
 
-    const reportId = params.reportId;
+    const { reportId } = await params;
 
     const report = await getReport(reportId, supabaseClient);
 

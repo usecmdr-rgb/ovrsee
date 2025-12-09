@@ -8,12 +8,12 @@ import { requireAuthFromRequest } from "@/lib/auth-helpers";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const leadId = params.id;
+    const { id: leadId } = await params;
     const supabase = getSupabaseServerClient();
 
     const { data: opportunities, error } = await supabase

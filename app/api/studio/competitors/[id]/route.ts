@@ -16,7 +16,7 @@ import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { supabaseClient, user, responseHeaders } =
@@ -30,7 +30,7 @@ export async function GET(
       );
     }
 
-    const competitorId = params.id;
+    const { id: competitorId } = await params;
 
     // Get competitor
     const { data: competitor, error: compError } = await supabaseClient

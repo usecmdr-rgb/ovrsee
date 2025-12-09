@@ -11,12 +11,12 @@ import { requireAuthFromRequest } from "@/lib/auth-helpers";
 
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuthFromRequest(request);
     const userId = user.id;
-    const emailId = context.params.id;
+    const { id: emailId } = await context.params;
 
     if (!emailId) {
       return NextResponse.json(

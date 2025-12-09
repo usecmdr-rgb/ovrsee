@@ -18,9 +18,9 @@ const RETRY_DELAY_MS = 5000; // 5 seconds base delay
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
-  const postId = params.postId;
+  const { postId } = await params;
 
   if (!postId) {
     return NextResponse.json(

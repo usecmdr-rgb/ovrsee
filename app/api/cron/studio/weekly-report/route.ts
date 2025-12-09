@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        const report = await generateWeeklyReport(workspaceId, undefined, undefined, undefined, supabase);
+        const report = await generateWeeklyReport(workspaceId, undefined, undefined, undefined, { supabaseClient: supabase });
         await logInfo("cron_weekly_report_success", {
           workspace_id: workspaceId,
           report_id: report.id,
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
             undefined,
             undefined,
             undefined,
-            supabase
+            { supabaseClient: supabase }
           );
           results.push({
             workspace_id: workspace.id,

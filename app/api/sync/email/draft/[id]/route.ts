@@ -13,7 +13,7 @@ const DRAFT_CACHE_HOURS = 24;
 
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = getSupabaseServerClient();
@@ -38,7 +38,7 @@ export async function GET(
     }
 
     const userId = userResult.user.id;
-    const emailId = context.params.id;
+    const { id: emailId } = await context.params;
 
     if (!emailId) {
       return NextResponse.json(
@@ -162,7 +162,7 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = getSupabaseServerClient();
@@ -187,7 +187,7 @@ export async function PATCH(
     }
 
     const userId = userResult.user.id;
-    const emailId = context.params.id;
+    const { id: emailId } = await context.params;
 
     if (!emailId) {
       return NextResponse.json(
