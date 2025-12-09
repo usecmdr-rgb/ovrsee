@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
 
   // Extract handle/name from metadata
   const handle = provider === "instagram" 
-    ? (metadata.username || metadata.name)
+    ? (metadata.name || metadata.primary_page_name)
     : (metadata.name || metadata.primary_page_name);
 
   // Upsert to workspace-scoped studio_social_accounts
