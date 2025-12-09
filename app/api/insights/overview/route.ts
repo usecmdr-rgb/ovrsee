@@ -48,6 +48,12 @@ export async function GET(request: NextRequest) {
       importantThisWeek: 0,
       paymentsThisWeek: 0,
       missedNeedsReply: 0,
+      revenue: {
+        pipelineValueByStage: {},
+        totalOpenPipelineValue: 0,
+        totalWonRevenueLast30Days: 0,
+        totalWonRevenueAllTime: 0,
+      },
     };
 
     // 1. Lead funnel: Count of leads per lead_stage
