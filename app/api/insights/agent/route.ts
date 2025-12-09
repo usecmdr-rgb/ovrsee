@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const validation = requestSchema.safeParse(body);
     if (!validation.success) {
       return NextResponse.json(
-        { ok: false, error: validation.error.errors[0]?.message || "Invalid request" },
+        { ok: false, error: validation.error.issues[0]?.message || "Invalid request" },
         { status: 400, headers: responseHeaders }
       );
     }
