@@ -106,7 +106,7 @@ export async function summarizeWorkspacePreferences(
     tone_shift: toneShift,
     avg_caption_length_reduction: avgLengthReduction > 0 ? Math.round(avgLengthReduction) : undefined,
     avg_hashtag_reduction: avgHashtagChange < 0 ? Math.round(Math.abs(avgHashtagChange)) : undefined,
-    edit_frequency,
+    edit_frequency: editFrequency,
   };
 }
 

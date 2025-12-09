@@ -422,8 +422,8 @@ Provide a brief summary (3-4 sentences) with actionable insights.`;
       "experiment_summary",
       { results: cacheKey },
       experiment.workspace_id,
-      supabase,
-      7 * 24 * 60 * 60 // 7 days TTL
+      7 * 24 * 60 * 60, // 7 days TTL
+      supabase
     );
 
     return summary;

@@ -735,7 +735,7 @@ Return JSON with this structure:
             },
             created_by: userId,
           })
-          .select("id")
+          .select("id, caption")
           .single();
 
         if (postError || !post) {
@@ -747,7 +747,8 @@ Return JSON with this structure:
 
         // Parse hashtags
         try {
-          await upsertPostHashtags(workspaceId, post.id, post.caption, supabase);
+          const caption = (post as any).caption || proposedPost.caption || proposedPost.content_brief;
+          await upsertPostHashtags(workspaceId, post.id, caption, supabase);
         } catch (hashtagError) {
           console.error("Failed to process hashtags:", hashtagError);
         }
