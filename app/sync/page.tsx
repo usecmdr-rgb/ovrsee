@@ -811,6 +811,23 @@ const SyncPage = () => {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-refresh emails every 2 minutes when authenticated and Gmail is connected
+  useEffect(() => {
+    if (!isAuthenticated || !isGmailConnected) return;
+
+    // Load emails initially
+    loadGmailEmails();
+
+    // Set up automatic refresh every 2 minutes (120000ms)
+    const refreshInterval = setInterval(() => {
+      if (!isRefreshing && !isLoadingEmails) {
+        loadGmailEmails();
+      }
+    }, 120000); // 2 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated, isGmailConnected, isRefreshing, isLoadingEmails, loadGmailEmails]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState("");
