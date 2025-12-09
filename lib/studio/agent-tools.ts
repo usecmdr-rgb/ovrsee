@@ -8,7 +8,7 @@
 import { getSupabaseServerClient } from "@/lib/supabaseServerClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SocialPlatform } from "./social-account-service";
-import { logInfo, logError, logToolCall } from "./logging";
+import { logInfo, logError } from "./logging";
 import { InvalidInputError, MissingDataError } from "./errors";
 
 export interface ToolResult {
@@ -371,7 +371,7 @@ export async function repurposePost(
     // Verify source post exists and belongs to workspace
     const { data: sourcePost } = await supabase
       .from("studio_social_posts")
-      .select("id, platform")
+      .select("id, platform, content_group_id")
       .eq("id", args.source_post_id)
       .eq("workspace_id", workspaceId)
       .single();
@@ -934,9 +934,21 @@ export async function logToolCall(
   toolName: string,
   args: any,
   result: ToolResult,
+  durationOrSupabase: number | SupabaseClient,
   supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = supabaseClient || getSupabaseServerClient();
+  // Handle both call patterns: with duration, or without
+  let duration = 0;
+  let client: SupabaseClient | undefined;
+  
+  if (typeof durationOrSupabase === 'number') {
+    duration = durationOrSupabase;
+    client = supabaseClient;
+  } else {
+    client = durationOrSupabase;
+  }
+  
+  const supabase = client || getSupabaseServerClient();
 
   try {
     // Store in a tool_calls table or log to console

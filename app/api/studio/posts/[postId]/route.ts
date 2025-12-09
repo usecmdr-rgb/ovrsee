@@ -27,7 +27,8 @@ export async function GET(
       await getAuthenticatedSupabaseFromRequest(request);
     
     userId = user.id;
-    workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
+    const workspaceIdResult = await getWorkspaceIdForUser(user.id, supabaseClient);
+    workspaceId = workspaceIdResult ?? undefined;
     if (!workspaceId) {
       return NextResponse.json(
         { ok: false, error: "Workspace not found" },
@@ -135,7 +136,8 @@ export async function PATCH(
       await getAuthenticatedSupabaseFromRequest(request);
     
     userId = user.id;
-    workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
+    const workspaceIdResult = await getWorkspaceIdForUser(user.id, supabaseClient);
+    workspaceId = workspaceIdResult ?? undefined;
     if (!workspaceId) {
       return NextResponse.json(
         { ok: false, error: "Workspace not found" },

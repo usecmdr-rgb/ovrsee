@@ -160,14 +160,14 @@ export const PRICE_ID_TO_PLAN_AND_INTERVAL: Record<
  * Get plan configuration by plan code
  */
 export function getPlanConfig(plan: PlanCode) {
-  return PRICING_CONFIG.plans[plan];
+  return PRICING_CONFIG.plans[plan as CorePlanCode];
 }
 
 /**
  * Get Stripe price ID for a plan based on billing interval
  */
 export function getStripePriceId(plan: PlanCode, billingCycle: BillingCycle): string {
-  const planConfig = PRICING_CONFIG.plans[plan];
+  const planConfig = PRICING_CONFIG.plans[plan as CorePlanCode];
   return billingCycle === 'yearly' ? planConfig.yearlyPriceId : planConfig.monthlyPriceId;
 }
 
@@ -175,7 +175,7 @@ export function getStripePriceId(plan: PlanCode, billingCycle: BillingCycle): st
  * Get price amount for a plan based on billing interval (in cents)
  */
 export function getPlanAmount(plan: PlanCode, billingCycle: BillingCycle): number {
-  const planConfig = PRICING_CONFIG.plans[plan];
+  const planConfig = PRICING_CONFIG.plans[plan as CorePlanCode];
   return billingCycle === 'yearly' ? planConfig.yearlyAmount : planConfig.monthlyAmount;
 }
 

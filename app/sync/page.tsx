@@ -20,6 +20,7 @@ import EditDraftModal from "@/components/sync/EditDraftModal";
 import TodayDashboard from "@/components/sync/TodayDashboard";
 import LeadManagementPanel from "@/components/sync/LeadManagementPanel";
 import BusinessInfoBanner from "@/components/sync/BusinessInfoBanner";
+import Modal from "@/components/ui/Modal";
 import { CATEGORY_CONFIG, getAllCategories, getCategoryConfig, type EmailCategory } from "@/lib/sync/categoryUi";
 import { Clock } from "lucide-react";
 import { isFollowUpSuggestionsEnabled, isLeadScoringEnabled, isTodayDashboardEnabled, isAiCopilotEnabled } from "@/lib/sync/featureFlags";
@@ -132,59 +133,6 @@ interface CustomAlert {
   memo?: string;
   reminder?: string;
 }
-
-// Category configuration with icons and color tokens
-const CATEGORY_CONFIG = {
-  important: {
-    icon: Star,
-    color: "#ef4444",
-    bgColor: "bg-red-50 dark:bg-red-950/20",
-    textColor: "text-red-700 dark:text-red-300",
-    borderColor: "border-red-200 dark:border-red-800",
-  },
-  missed_unread: {
-    icon: Bell,
-    color: "#fb923c",
-    bgColor: "bg-orange-50 dark:bg-orange-950/20",
-    textColor: "text-orange-700 dark:text-orange-300",
-    borderColor: "border-orange-200 dark:border-orange-800",
-  },
-  payment_bill: {
-    icon: DollarSign,
-    color: "#22c55e",
-    bgColor: "bg-green-50 dark:bg-green-950/20",
-    textColor: "text-green-700 dark:text-green-300",
-    borderColor: "border-green-200 dark:border-green-800",
-  },
-  invoice: {
-    icon: Receipt,
-    color: "#a855f7",
-    bgColor: "bg-purple-50 dark:bg-purple-950/20",
-    textColor: "text-purple-700 dark:text-purple-300",
-    borderColor: "border-purple-200 dark:border-purple-800",
-  },
-  marketing: {
-    icon: Megaphone,
-    color: "#3b82f6",
-    bgColor: "bg-blue-50 dark:bg-blue-950/20",
-    textColor: "text-blue-700 dark:text-blue-300",
-    borderColor: "border-blue-200 dark:border-blue-800",
-  },
-  updates: {
-    icon: RefreshCw,
-    color: "#06b6d4",
-    bgColor: "bg-cyan-50 dark:bg-cyan-950/20",
-    textColor: "text-cyan-700 dark:text-cyan-300",
-    borderColor: "border-cyan-200 dark:border-cyan-800",
-  },
-  other: {
-    icon: Circle,
-    color: "#94a3b8",
-    bgColor: "bg-slate-50 dark:bg-slate-900/40",
-    textColor: "text-slate-700 dark:text-slate-300",
-    borderColor: "border-slate-200 dark:border-slate-700",
-  },
-} as const;
 
 // Insights Tab Content Component
 const InsightsTabContentSync = ({ onSwitchTab }: { onSwitchTab: (tab: "email" | "today" | "calendar" | "insights") => void }) => {
@@ -843,6 +791,8 @@ const SyncPage = () => {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showEditDraftModal, setShowEditDraftModal] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   
   // Calendar state
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
@@ -1591,14 +1541,14 @@ const SyncPage = () => {
         
         // Update local state with new categories
         if (data.items && data.items.length > 0) {
-          const categoryMap = new Map(data.items.map((item: { id: string; category: string }) => [item.id, item.category]));
+          const categoryMap = new Map<string, string>(data.items.map((item: { id: string; category: string }) => [item.id, item.category]));
           
           // Update emailQueueItems
           setEmailQueueItems((prev) =>
             prev.map((item) => {
               const newCategory = categoryMap.get(item.id);
               if (newCategory) {
-                return { ...item, category: newCategory };
+                return { ...item, category: newCategory as string };
               }
               return item;
             })
@@ -1619,7 +1569,7 @@ const SyncPage = () => {
           if (selectedEmail && "id" in selectedEmail) {
             const newCategory = categoryMap.get(selectedEmail.id);
             if (newCategory) {
-              setSelectedEmail({ ...selectedEmail, category: newCategory, categoryId: newCategory });
+              setSelectedEmail({ ...selectedEmail, category: newCategory, categoryId: newCategory } as typeof selectedEmail);
             }
           }
         }
@@ -1813,6 +1763,54 @@ const SyncPage = () => {
     handleConnectGmail();
   };
 
+  const handleDisconnectGmail = async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    try {
+      setIsDisconnecting(true);
+      
+      // Get session
+      const { data: { session }, error: sessionError } = await supabaseBrowserClient.auth.getSession();
+      
+      if (!session?.access_token) {
+        setIsDisconnecting(false);
+        return;
+      }
+
+      // Call disconnect API
+      const res = await fetch("/api/gmail/disconnect", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to disconnect Gmail");
+      }
+
+      // Close modal and refresh status
+      setShowDisconnectModal(false);
+      setIsGmailConnected(false);
+      setSyncStatus({ connected: false });
+      
+      // Clear emails
+      setGmailEmails([]);
+      setEmailQueueItems([]);
+      
+      // Refresh connection status
+      await checkGmailConnection();
+    } catch (error: any) {
+      console.error("Error disconnecting Gmail:", error);
+      alert(error.message || "Failed to disconnect Gmail. Please try again.");
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event);
     setNoteText(event.notes || "");
@@ -1874,7 +1872,7 @@ const SyncPage = () => {
         fromAddress: email.fromAddress,
         subject: email.subject,
         timestamp: new Date(email.timestamp).toLocaleDateString(),
-        categoryId: email.categoryId || null, // Keep null for uncategorized
+        categoryId: email.categoryId || undefined, // Keep undefined for uncategorized
         status: email.status || "needs_reply",
         snippet: email.snippet,
         draft: email.draft || "",
@@ -1928,14 +1926,14 @@ const SyncPage = () => {
   const alertCategories = useMemo(() => {
     // Define the 8 fixed categories using the config (including Follow-ups)
     const categoryDefinitions = [
-      { id: "important", name: "Important", ...CATEGORY_CONFIG.important },
-      { id: "missed_unread", name: "Missed / Unread", ...CATEGORY_CONFIG.missed_unread },
-      { id: "followups", name: "Follow-ups", ...CATEGORY_CONFIG.followups },
-      { id: "payment_bill", name: "Payments / Bills", ...CATEGORY_CONFIG.payment_bill },
-      { id: "invoice", name: "Invoices", ...CATEGORY_CONFIG.invoice },
-      { id: "marketing", name: "Marketing", ...CATEGORY_CONFIG.marketing },
-      { id: "updates", name: "Updates", ...CATEGORY_CONFIG.updates },
-      { id: "other", name: "Other", ...CATEGORY_CONFIG.other },
+      { id: "important", name: "Important", icon: CATEGORY_CONFIG.important.icon, color: "#ef4444", bgColor: CATEGORY_CONFIG.important.bgColor, textColor: CATEGORY_CONFIG.important.textColor, borderColor: CATEGORY_CONFIG.important.borderColor },
+      { id: "missed_unread", name: "Missed / Unread", icon: CATEGORY_CONFIG.missed_unread.icon, color: "#fb923c", bgColor: CATEGORY_CONFIG.missed_unread.bgColor, textColor: CATEGORY_CONFIG.missed_unread.textColor, borderColor: CATEGORY_CONFIG.missed_unread.borderColor },
+      { id: "followups", name: "Follow-ups", icon: CATEGORY_CONFIG.followups.icon, color: "#fb923c", bgColor: CATEGORY_CONFIG.followups.bgColor, textColor: CATEGORY_CONFIG.followups.textColor, borderColor: CATEGORY_CONFIG.followups.borderColor },
+      { id: "payment_bill", name: "Payments / Bills", icon: CATEGORY_CONFIG.payment_bill.icon, color: "#22c55e", bgColor: CATEGORY_CONFIG.payment_bill.bgColor, textColor: CATEGORY_CONFIG.payment_bill.textColor, borderColor: CATEGORY_CONFIG.payment_bill.borderColor },
+      { id: "invoice", name: "Invoices", icon: CATEGORY_CONFIG.invoice.icon, color: "#a855f7", bgColor: CATEGORY_CONFIG.invoice.bgColor, textColor: CATEGORY_CONFIG.invoice.textColor, borderColor: CATEGORY_CONFIG.invoice.borderColor },
+      { id: "marketing", name: "Marketing", icon: CATEGORY_CONFIG.marketing.icon, color: "#3b82f6", bgColor: CATEGORY_CONFIG.marketing.bgColor, textColor: CATEGORY_CONFIG.marketing.textColor, borderColor: CATEGORY_CONFIG.marketing.borderColor },
+      { id: "updates", name: "Updates", icon: CATEGORY_CONFIG.updates.icon, color: "#06b6d4", bgColor: CATEGORY_CONFIG.updates.bgColor, textColor: CATEGORY_CONFIG.updates.textColor, borderColor: CATEGORY_CONFIG.updates.borderColor },
+      { id: "other", name: "Other", icon: CATEGORY_CONFIG.other.icon, color: "#94a3b8", bgColor: CATEGORY_CONFIG.other.bgColor, textColor: CATEGORY_CONFIG.other.textColor, borderColor: CATEGORY_CONFIG.other.borderColor },
     ];
 
     // Count emails by category
@@ -2715,6 +2713,15 @@ const SyncPage = () => {
                   ) : (
                     <RotateCcw className="h-3.5 w-3.5" />
                   )}
+                </button>
+                <button
+                  onClick={() => setShowDisconnectModal(true)}
+                  disabled={isDisconnecting}
+                  className="p-1.5 rounded-full border border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  title="Disconnect Gmail"
+                  aria-label="Disconnect Gmail"
+                >
+                  <X className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                 </button>
               </div>
             )}
@@ -4843,6 +4850,43 @@ const SyncPage = () => {
           />
         </>
       )}
+
+      {/* Disconnect Gmail Confirmation Modal */}
+      <Modal
+        open={showDisconnectModal}
+        onClose={() => setShowDisconnectModal(false)}
+        title="Disconnect Gmail"
+        description="Are you sure you want to disconnect your Gmail account? You will need to reconnect to sync emails again."
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            This will disconnect your Gmail account from OVRSEE. You can reconnect at any time.
+          </p>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleDisconnectGmail}
+              disabled={isDisconnecting}
+              className="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {isDisconnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                  Disconnecting...
+                </>
+              ) : (
+                "Log Out"
+              )}
+            </button>
+            <button
+              onClick={() => setShowDisconnectModal(false)}
+              disabled={isDisconnecting}
+              className="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

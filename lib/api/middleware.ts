@@ -67,7 +67,10 @@ export function withRateLimit(
   return withErrorHandler(async (request: NextRequest) => {
     // Get identifier (userId if authenticated, otherwise IP)
     const user = await getAuthenticatedUser(request);
-    const identifier = user?.userId || request.ip || "unknown";
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || 
+               request.headers.get("x-real-ip") || 
+               "unknown";
+    const identifier = user?.userId || ip;
     
     const config = RateLimitPresets[preset];
     const result = rateLimiter.check(identifier, config.maxRequests, config.windowMs);

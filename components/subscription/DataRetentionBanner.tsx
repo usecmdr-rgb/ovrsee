@@ -1,6 +1,7 @@
 "use client";
 
 import { useDataRetention } from "@/hooks/useDataRetention";
+import { useAppState } from "@/context/AppStateContext";
 import { AlertTriangle, Clock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -14,6 +15,7 @@ import { useTranslation } from "@/hooks/useTranslation";
  * - Data cleared: Shows that data has been cleared
  */
 export default function DataRetentionBanner() {
+  const { isAuthenticated } = useAppState();
   const {
     isTrialExpired,
     isInRetentionWindow,
@@ -24,7 +26,8 @@ export default function DataRetentionBanner() {
   } = useDataRetention();
   const t = useTranslation();
 
-  if (loading) {
+  // Don't show banner if user is not authenticated
+  if (!isAuthenticated || loading) {
     return null;
   }
 

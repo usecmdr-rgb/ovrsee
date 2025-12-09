@@ -9,7 +9,7 @@ import { supabaseBrowserClient } from "@/lib/supabaseClient";
 import { useTranslation } from "@/hooks/useTranslation";
 
 const AuthModal = () => {
-  const { authModalMode, closeAuthModal, login } = useAppState();
+  const { authModalMode, closeAuthModal, openAuthModal, login } = useAppState();
   const router = useRouter();
   const t = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);

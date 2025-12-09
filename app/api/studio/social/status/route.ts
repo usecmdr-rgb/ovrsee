@@ -27,14 +27,9 @@ export interface AccountStatus {
 }
 
 export async function GET(request: NextRequest) {
-  const { supabase, response } = await getAuthenticatedSupabaseFromRequest(request);
-  const user = await supabase.auth.getUser();
+  const { supabaseClient, user, responseHeaders } = await getAuthenticatedSupabaseFromRequest(request);
 
-  if (user.error || !user.data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const workspaceId = await getWorkspaceIdForUser(supabase, user.data.user.id);
+  const workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   }
@@ -43,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Get all connected accounts
     const accounts = await getSocialAccounts(workspaceId, {
       includeCredentials: false,
-      supabaseClient: supabase,
+      supabaseClient: supabaseClient,
     });
 
     const connectedAccounts = accounts.filter((acc) => acc.status === "connected");
@@ -55,7 +50,7 @@ export async function GET(request: NextRequest) {
         // First, try to ensure fresh token (this will refresh if needed)
         let tokenStatus: "ok" | "token_expiring" | "token_expired" = "ok";
         try {
-          await ensureFreshAccessToken(account, supabase);
+          await ensureFreshAccessToken(account, supabaseClient);
         } catch (error: any) {
           if (error.message?.includes("expired") || error.message?.includes("Token expired")) {
             tokenStatus = "token_expired";
@@ -69,7 +64,7 @@ export async function GET(request: NextRequest) {
         let accessToken: string | undefined;
 
         try {
-          accessToken = await ensureFreshAccessToken(account, supabase);
+          accessToken = await ensureFreshAccessToken(account, supabaseClient);
         } catch {
           // Token refresh failed, but we'll still try health check
         }
@@ -191,13 +186,14 @@ export async function GET(request: NextRequest) {
           platform: account.platform,
           account_id: account.id,
           status,
-        });
+        }, supabaseClient);
       } catch (error: any) {
-        await logError("account_health_check_error", error, {
+        await logError("account_health_check_error", {
           workspace_id: workspaceId,
           platform: account.platform,
           account_id: account.id,
-        });
+          error: error.message || String(error),
+        }, supabaseClient);
 
         statuses.push({
           accountId: account.id,

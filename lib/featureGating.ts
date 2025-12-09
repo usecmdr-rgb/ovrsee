@@ -44,7 +44,7 @@ export async function getActiveSubscriptionForUser(userId: string): Promise<Acti
     return null;
   }
 
-  if (!data) {
+  if (!data || !(data as any).id) {
     return null;
   }
 
@@ -52,21 +52,21 @@ export async function getActiveSubscriptionForUser(userId: string): Promise<Acti
   const { data: addonsData, error: addonsError } = await supabase
     .from('subscription_addons')
     .select('addon')
-    .eq('subscription_id', data.id);
+    .eq('subscription_id', (data as any).id);
 
   const addons: AddonCode[] = addonsError || !addonsData
     ? []
     : addonsData.map((row: any) => row.addon as AddonCode);
 
   return {
-    id: data.id,
-    userId: data.user_id,
-    stripeSubscriptionId: data.stripe_subscription_id,
-    plan: data.plan as PlanCode,
-    status: data.status,
-    currentPeriodStart: data.current_period_start,
-    currentPeriodEnd: data.current_period_end,
-    cancelAtPeriodEnd: data.cancel_at_period_end,
+    id: (data as any).id,
+    userId: (data as any).user_id,
+    stripeSubscriptionId: (data as any).stripe_subscription_id,
+    plan: (data as any).plan as PlanCode,
+    status: (data as any).status,
+    currentPeriodStart: (data as any).current_period_start,
+    currentPeriodEnd: (data as any).current_period_end,
+    cancelAtPeriodEnd: (data as any).cancel_at_period_end,
     addons,
   };
 }

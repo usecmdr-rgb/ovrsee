@@ -173,7 +173,7 @@ export default function StudioIntelligence() {
               {links.map((link, idx) => (
                 <button
                   key={idx}
-                  onClick={() => router.push(link)}
+                  onClick={() => router.push(link as any)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 text-xs font-medium dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
                 >
                   <ExternalLink size={12} />

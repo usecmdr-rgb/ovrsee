@@ -409,7 +409,6 @@ export default function PricingTable() {
                         <Button
                           onClick={() => handleSubscribe("basic")}
                           disabled={checkoutLoading === "basic"}
-                          size="sm"
                           className="mt-2 w-full text-xs"
                         >
                           {checkoutLoading === "basic" ? "Loading..." : "Get Started"}
@@ -427,7 +426,6 @@ export default function PricingTable() {
                         <Button
                           onClick={() => handleSubscribe("advanced")}
                           disabled={checkoutLoading === "advanced"}
-                          size="sm"
                           className="mt-2 w-full text-xs"
                         >
                           {checkoutLoading === "advanced" ? "Loading..." : "Get Started"}
@@ -445,7 +443,6 @@ export default function PricingTable() {
                         <Button
                           onClick={() => handleSubscribe("elite")}
                           disabled={checkoutLoading === "elite"}
-                          size="sm"
                           className="mt-2 w-full text-xs"
                         >
                           {checkoutLoading === "elite" ? "Loading..." : "Get Started"}

@@ -46,52 +46,6 @@ export async function POST(request: NextRequest) {
       },
       { status: 400, headers: responseHeaders }
     );
-
-    // Legacy code (commented out):
-    // Upsert into studio_social_accounts with status = 'connected'
-    // For now, we simulate connected state until real OAuth is implemented
-    /*
-    const { data: account, error: accountError } = await supabaseClient
-      .from("studio_social_accounts")
-      .upsert(
-        {
-          workspace_id: workspaceId,
-          created_by: user.id,
-          platform,
-          status: "connected",
-          connected_at: new Date().toISOString(),
-          // Simulated data for now
-          handle: `@${platform}_account`,
-          metadata: {
-            simulated: true,
-            note: "This is a simulated connection. Real OAuth integration coming soon.",
-          },
-        },
-        {
-          onConflict: "workspace_id,platform",
-        }
-      )
-      .select()
-      .single();
-    */
-
-    if (accountError) {
-      console.error("Error connecting social account:", accountError);
-      return NextResponse.json(
-        { ok: false, error: "Failed to connect social account", details: accountError.message },
-        { status: 500, headers: responseHeaders }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        data: {
-          account,
-        },
-      },
-      { headers: responseHeaders }
-    );
   } catch (error: any) {
     console.error("Error in studio social connect endpoint:", error);
     return NextResponse.json(

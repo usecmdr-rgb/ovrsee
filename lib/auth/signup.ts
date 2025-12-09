@@ -130,7 +130,7 @@ export async function createUserAccount(data: SignupData) {
       if (typeof authError === 'object') {
         console.error("authError keys:", Object.keys(authError));
         for (const key in authError) {
-          console.error(`authError.${key}:`, authError[key]);
+          console.error(`authError.${key}:`, (authError as any)[key]);
         }
       }
     }

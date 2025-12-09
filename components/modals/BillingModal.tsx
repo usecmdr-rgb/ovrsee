@@ -87,7 +87,7 @@ const BillingModal = () => {
           {loading ? t("loading") : t("billingManageButton")}
         </button>
         <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
-          {t("billingNoSubscriptionNote") || "Don't have a subscription? Visit the pricing page to get started."}
+          {"Don't have a subscription? Visit the pricing page to get started."}
         </p>
       </div>
     </Modal>

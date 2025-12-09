@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       await getAuthenticatedSupabaseFromRequest(request);
     
     userId = user.id;
-    workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
+    workspaceId = (await getWorkspaceIdForUser(user.id, supabaseClient)) || undefined;
     if (!workspaceId) {
       return NextResponse.json(
         { ok: false, error: "Workspace not found" },
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
       await getAuthenticatedSupabaseFromRequest(request);
     
     userId = user.id;
-    workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
+    workspaceId = (await getWorkspaceIdForUser(user.id, supabaseClient)) || undefined;
     if (!workspaceId) {
       return NextResponse.json(
         { ok: false, error: "Workspace not found" },

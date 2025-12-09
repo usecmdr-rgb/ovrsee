@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useAgentStats, emptyAgentStats } from "@/hooks/useAgentStats";
 import { useAgentAccess } from "@/hooks/useAgentAccess";
 import { useAccountMode } from "@/hooks/useAccountMode";
+import { useAppState } from "@/context/AppStateContext";
 import PreviewBanner from "@/components/agent/PreviewBanner";
 import TrialExpiredBanner from "@/components/agent/TrialExpiredBanner";
 import { AGENT_BY_ID } from "@/lib/config/agents";
@@ -58,9 +59,11 @@ export default function InsightPage() {
   // Determine if user is in preview mode based on account mode
   const isPreview = isAccessReady && accountMode === 'preview';
   
-  // Check if trial is expired - but don't show for super admins or users with active subscriptions/trials
+  // Check if trial is expired - only show for authenticated users (not super admins)
   // Note: account mode API already returns 'subscribed' for super admins, but we check isSuperAdmin as a safety measure
-  const isTrialExpired = isAccessReady && 
+  const { isAuthenticated } = useAppState();
+  const isTrialExpired = isAuthenticated && 
+    isAccessReady && 
     accountMode === 'trial-expired' && 
     !isSuperAdmin;
   

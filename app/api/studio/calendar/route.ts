@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
         published_at: post.published_at,
         posted_at: post.posted_at,
         display_date: displayDate,
-        account_handle: post.studio_social_accounts?.handle || null,
+        account_handle: (post.studio_social_accounts as any)?.handle || null,
         predicted_score_label: post.predicted_score_label,
         predicted_score_numeric: post.predicted_score_numeric,
         experiment_id: post.experiment_id,

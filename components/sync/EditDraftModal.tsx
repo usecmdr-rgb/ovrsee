@@ -57,7 +57,7 @@ export default function EditDraftModal({
       title="Edit Draft"
       description="Review and edit your draft reply"
       open={open}
-      onClose={isSaving ? undefined : onClose}
+      onClose={isSaving ? () => {} : onClose}
       size="lg"
     >
       <div className="space-y-4">

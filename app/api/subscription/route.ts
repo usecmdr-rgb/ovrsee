@@ -58,10 +58,10 @@ export async function GET(request: NextRequest) {
             email: authUser.user.email,
             full_name: authUser.user.user_metadata?.full_name || null,
           })
-          .select("subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id, trial_ends_at")
+          .select("subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id, trial_ends_at, has_used_trial")
           .single();
         
-        // Add has_used_trial if column exists (for compatibility)
+        // Set has_used_trial to false for new profiles
         if (newProfile) {
           (newProfile as any).has_used_trial = false;
         }

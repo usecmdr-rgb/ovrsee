@@ -287,12 +287,6 @@ You have access to competitor data. If the user asks about competitors or how th
 ${competitorSummary.competitors.map((comp) => `- ${comp.label || comp.handle} (@${comp.handle} on ${comp.platform})`).join("\n")}
 ` : ""}
 
-${preferencesText ? `
-User Preferences:
-${preferencesText}
-Adapt your suggestions to match these learned preferences when possible.
-` : ""}
-
 Be helpful, proactive, and brand-focused. When you perform actions, explain what you did and why.`;
 
     // Build conversation messages
@@ -332,6 +326,7 @@ Be helpful, proactive, and brand-focused. When you perform actions, explain what
 
       // Execute each tool call
       for (const toolCall of toolCalls) {
+        if (toolCall.type !== "function") continue;
         const toolName = toolCall.function.name;
         const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
 

@@ -96,7 +96,7 @@ export default function SendEmailModal({
       title="Send Email"
       description="Review your email before sending"
       open={open}
-      onClose={isSending ? undefined : onClose}
+      onClose={isSending ? () => {} : onClose}
       size="lg"
     >
       <div className="space-y-4">

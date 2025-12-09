@@ -52,9 +52,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let responseHeaders: Headers | undefined;
   try {
-    const { supabaseClient, user, responseHeaders } =
-      await getAuthenticatedSupabaseFromRequest(request);
+    const authResult = await getAuthenticatedSupabaseFromRequest(request);
+    const { supabaseClient, user } = authResult;
+    responseHeaders = authResult.responseHeaders;
 
     const workspaceId = await getWorkspaceIdForUser(user.id, supabaseClient);
     if (!workspaceId) {

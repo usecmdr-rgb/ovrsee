@@ -360,10 +360,10 @@ export default function DashboardPage() {
     return isAccessReady && accountMode === 'preview';
   }, [isAccessReady, accountMode]);
   
-  // Check if trial is expired
+  // Check if trial is expired - only show for authenticated users
   const isTrialExpired = useMemo(() => {
-    return isAccessReady && accountMode === 'trial-expired';
-  }, [isAccessReady, accountMode]);
+    return isAuthenticated && isAccessReady && accountMode === 'trial-expired';
+  }, [isAuthenticated, isAccessReady, accountMode]);
   
   // Memoize preview stats lookup
   const previewStats = useMemo(() => dataByTimeframe[timeframe], [timeframe]);

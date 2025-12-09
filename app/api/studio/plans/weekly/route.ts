@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       week_start, // Optional: ISO date for week start (defaults to next Monday)
       preferences, // Optional: PlanPreferences
       avoid_duplicates = true, // Check for existing posts in same week
+      campaign_id, // Optional: Campaign ID to associate posts with
     } = body;
 
     const supabase = getSupabaseServerClient();
@@ -149,6 +150,9 @@ export async function POST(request: NextRequest) {
 
     const availablePlatforms = connectedAccounts.map((a) => a.platform);
 
+    // Get top hashtags
+    const topHashtags = await getTopHashtagsForSuggestions(workspaceId, 10, 30, supabase);
+
     // Build LLM prompt
     const systemPrompt = `You are a social media content strategist and planner. Your job is to create a weekly content plan that:
 1. Aligns with the brand's identity and voice
@@ -187,7 +191,6 @@ ${topHashtags.map((h, i) => `${i + 1}. #${h.name} (engagement: ${h.engagement_ra
 
 Available Platforms: ${availablePlatforms.join(", ")}
 
-${preferencesText ? `${preferencesText}\n` : ""}
 ${preferences ? `User Preferences:\n${JSON.stringify(preferences, null, 2)}` : ""}
 
 Requirements:
@@ -304,7 +307,7 @@ Return JSON with this structure:
 
         // Parse and store hashtags from caption
         try {
-          await upsertPostHashtags(workspaceId, post.id, post.caption, supabase);
+          await upsertPostHashtags(workspaceId, post.id, caption, supabase);
         } catch (hashtagError) {
           // Log but don't fail the post creation
           console.error("Failed to process hashtags:", hashtagError);

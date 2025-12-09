@@ -185,12 +185,12 @@ async function gmailApiRequest(
     const supabase = getSupabaseServerClient();
     const { data: connection } = await supabase
       .from("gmail_connections")
-      .select("refresh_token")
+      .select("refresh_token, id")
       .eq("user_id", userId)
       .single();
 
     if (connection?.refresh_token) {
-      await refreshGmailToken(connection.refresh_token, userId);
+      await refreshGmailToken(connection.refresh_token, userId, connection.id);
       const newAccessToken = await getGmailAccessToken(userId);
       
       // Retry request with new token
