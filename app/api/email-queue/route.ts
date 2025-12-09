@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
         if (contact) {
           const { data: lead } = await supabase
             .from("leads")
-            .select("lead_score, lead_stage, primary_service_id, budget, timeline")
+            .select("id, lead_score, lead_stage, primary_service_id, budget, timeline")
             .eq("user_id", userId)
             .eq("contact_id", contact.id)
             .order("last_activity_at", { ascending: false })
