@@ -25,7 +25,7 @@ export async function PATCH(
     const parsed = sequenceUpdateSchema.safeParse(json);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues }, { status: 400 });
     }
 
     const { sequenceId } = parsed.data;

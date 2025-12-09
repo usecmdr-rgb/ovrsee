@@ -35,7 +35,7 @@ export async function POST(
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.errors },
+        { error: parsed.error.issues },
         { status: 400 }
       );
     }
