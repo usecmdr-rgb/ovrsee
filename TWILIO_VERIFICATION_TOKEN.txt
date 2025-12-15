@@ -7,7 +7,7 @@ DNS TXT Record to Add:
 ----------------------
 Type: TXT
 Name: _twilio
-Value: 70f961eb52238e5b9279bcb7a4af9475
+Value: twilio-domain-verification=70f961eb52238e5b9279bcb7a4af9475
 TTL: 3600
 
 Quick Steps:
